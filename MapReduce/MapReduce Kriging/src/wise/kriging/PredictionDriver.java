@@ -39,10 +39,10 @@ public class PredictionDriver {
 		Path pt=null;
 		try {
 			String sCurrentLine;
-			pt =new Path("hdfs://jobs.ajou.ac.kr:8020/user/hduser/"+otherArgs[0]);
+			//pt =new Path("hdfs://jobs.ajou.ac.kr:8020/user/hduser/"+otherArgs[0]);
 			
 			//this path for local test
-			//pt =new Path("sampledummy/Data3_XYZ_Default.txt");
+			pt =new Path("sampledummy/10000.txt");
 			FileSystem fs = FileSystem.get(new Configuration());
 			br=new BufferedReader(new InputStreamReader(fs.open(pt)));
 
@@ -110,6 +110,11 @@ public class PredictionDriver {
 		conf.set("max_Y", Integer.toString((int)max_Y));
 		
 		System.out.println("gridXrange : "+(int)(max_X-min_X)+", gridYrange : "+(int)(max_Y-min_Y));
+
+		// delete the outputpath if already exists
+		FileSystem fs2 = FileSystem.get(conf);
+		if (fs2.exists(new Path(otherArgs[1])))
+			fs2.delete(new Path(otherArgs[1]), true);
 		
 		startTime = System.currentTimeMillis();
 		Job job = new Job(conf, otherArgs[0]+","+otherArgs[1]+",radius:"+otherArgs[2]);
@@ -121,11 +126,6 @@ public class PredictionDriver {
 		job.setCombinerClass(Reducer.class);
 		job.setReducerClass(PredictionReducer.class);
 		job.setNumReduceTasks( Integer.parseInt(otherArgs[3]));
-
-		// delete the outputpath if already exists
-		FileSystem fs2 = FileSystem.get(conf);
-		if (fs2.exists(new Path(otherArgs[1])))
-			fs2.delete(new Path(otherArgs[1]), true);
 
 		job.setInputFormatClass(NLineInputFormat.class);
 		NLineInputFormat.addInputPath(job, pt);

@@ -75,7 +75,7 @@ public class GriddingMapper extends Mapper<Object, Text, Text, Text> {
 		double radX = 0, radY = 0; // This is the GridPoint which is located inside square of GridRadius
 		Text t = new Text();
 
-		if(gridRadius>deltaX/2 && gridRadius>deltaY/2 ){
+		if((gridRadius>(deltaX/2)) && (gridRadius>(deltaY/2)) ){
 			radX = realXGridPoints - (gridRadius) + 1;
 			radY = realYGridPoints - (gridRadius) + 1;
 			for (k = 0; k < 2 * ((int)(gridRadius/deltaX)) - 1; k++) {
@@ -85,7 +85,7 @@ public class GriddingMapper extends Mapper<Object, Text, Text, Text> {
 					if (radX >= min_X && radX < min_X + gridXrange && radY >= min_Y
 							&& radY < min_Y + gridYrange){
 						//System.out.println("rad x:"+radX+", rad y:"+radY+", value: "+value);
-						t.set(Double.toString(radX) + "," + Double.toString(radY));
+						t.set(Double.toString(radX) + " " + Double.toString(radY));
 						context.write(t, value);				
 					}
 				}
@@ -96,7 +96,7 @@ public class GriddingMapper extends Mapper<Object, Text, Text, Text> {
 			if (radX >= min_X && radX < min_X + gridXrange && radY >= min_Y
 					&& radY < min_Y + gridYrange){
 				//System.out.println("rad x:"+radX+", rad y:"+radY+", value: "+value);
-				t.set(Double.toString(radX) + "," + Double.toString(radY));
+				t.set(Double.toString(radX) + " " + Double.toString(radY));
 				context.write(t, value);				
 			}
 		}
