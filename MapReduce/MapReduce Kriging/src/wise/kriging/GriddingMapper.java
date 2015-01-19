@@ -9,8 +9,8 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 
 public class GriddingMapper extends Mapper<Object, Text, Text, Text> {
-	int deltaX;
-	int deltaY;
+	double deltaX;
+	double deltaY;
 	int min_X;
 	int min_Y;
 	int max_X;
@@ -20,8 +20,8 @@ public class GriddingMapper extends Mapper<Object, Text, Text, Text> {
 
 	public void setup(Context context) {
 		Configuration conf = context.getConfiguration();
-		deltaX = Integer.parseInt(conf.get("deltaX"));// 1 grid size
-		deltaY = Integer.parseInt(conf.get("deltaY"));
+		deltaX = Double.parseDouble(conf.get("deltaX"));// 1 grid size
+		deltaY = Double.parseDouble(conf.get("deltaY"));
 		min_X = Integer.parseInt(conf.get("min_X"));
 		min_Y = Integer.parseInt(conf.get("min_Y"));
 		max_X = Integer.parseInt(conf.get("max_X"));

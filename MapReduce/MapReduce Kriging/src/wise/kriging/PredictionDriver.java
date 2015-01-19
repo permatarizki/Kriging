@@ -39,10 +39,10 @@ public class PredictionDriver {
 		Path pt=null;
 		try {
 			String sCurrentLine;
-			//pt =new Path("hdfs://jobs.ajou.ac.kr:8020/user/hduser/"+otherArgs[0]);
+			pt =new Path("hdfs://jobs.ajou.ac.kr:8020/user/hduser/"+otherArgs[0]);
 			
 			//this path for local test
-			pt =new Path("sampledummy/10000.txt");
+			//pt =new Path("sampledummy/10000.txt");
 			FileSystem fs = FileSystem.get(new Configuration());
 			br=new BufferedReader(new InputStreamReader(fs.open(pt)));
 
@@ -95,15 +95,18 @@ public class PredictionDriver {
 		//Start map-reduce phase
 
 		//default deltaX Y is 1
-		int deltaX=Integer.parseInt(otherArgs[4]); //this is represent X grid sizes in meter
-		int deltaY=Integer.parseInt(otherArgs[4]); //this is represent Y grid sizes in meter
+		//int deltaX=Integer.parseInt(otherArgs[4]); //this is represent X grid sizes in meter
+		//int deltaY=Integer.parseInt(otherArgs[4]); //this is represent Y grid sizes in meter
+		double deltaX = Double.parseDouble(otherArgs[4]);
+		double deltaY = Double.parseDouble(otherArgs[4]);
+		
 		//default grid radius is 3
 		int gridRadius=Integer.parseInt(otherArgs[2]);
 		conf.setInt("gridRadius", gridRadius);
 		conf.setInt("gridXrange", (int)(max_X-min_X));
 		conf.setInt("gridYrange", (int)(max_Y-min_Y));
-		conf.set("deltaX", Integer.toString(deltaX));
-		conf.set("deltaY", Integer.toString(deltaY));
+		conf.set("deltaX", Double.toString(deltaX));
+		conf.set("deltaY", Double.toString(deltaY));
 		conf.set("min_X", Integer.toString((int)min_X));
 		conf.set("min_Y", Integer.toString((int)min_Y));
 		conf.set("max_X", Integer.toString((int)max_X));
@@ -117,7 +120,7 @@ public class PredictionDriver {
 			fs2.delete(new Path(otherArgs[1]), true);
 		
 		startTime = System.currentTimeMillis();
-		Job job = new Job(conf, otherArgs[0]+","+otherArgs[1]+",radius:"+otherArgs[2]);
+		Job job = new Job(conf, otherArgs[0]+", output: "+otherArgs[1]+", searchRange:"+otherArgs[2]+", numReducer:"+otherArgs[3]+ "gridsizes:"+otherArgs[4]);
 
 		job.setJarByClass(PredictionDriver.class);
 		job.setMapperClass(GriddingMapper.class);
