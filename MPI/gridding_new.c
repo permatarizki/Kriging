@@ -36,7 +36,7 @@ double Eculidean();
 double minX=0.0, minY=0.0, maxX=0.0, maxY=0.0;
 //Lidar Data mapped grid
 //Info_Grid *startGrid=NULL;
-Pointer **interval; //**: X, *: Y
+PointerOfGrid **buffNodes_inOneGrid=NULL;
 Info_Grid *new_list=NULL;
 Info_Grid *cur=NULL;
 Info_Grid *forFreeGrid=NULL;
@@ -67,11 +67,11 @@ int main(int argc, char *argv[]){
 	//double maxD;
 	int minX_inputData, minY_inputData, maxX_inputData, maxY_inputData, gridXrange, gridYrange, gridXsize, gridYsize;
 	int numberofGrids_X, numberofGrids_Y;
-	int gridX, gridY, logicalVar[2], realXpoint, realYpoint;
+	double gridX, gridY;
 	int startX, startY, endX, endY, XofGrid, YofGrid;
 	int NNendX, NNendY;
 	int alphaGridX, alphaGridY;
-	int radX, radY, idxOfRadius=0, gridRadius=3, numOfNearestPoint=10;//for radius
+	int radX, radY, idxOfRadius=0, searchRadius=3, numOfNearestPoint=10;//for radius
 	int cnt_point=0, cardinal_direction;//0:x++ 1:y++ 2:x-- 3:y--
 	int divYsize, totlaPoints=0;
 	double delta, sumZ, maxDistance;
@@ -158,16 +158,16 @@ int main(int argc, char *argv[]){
 	numberofGrids_X = gridXrange / GRID_SIZE; numberofGrids_Y = gridYrange / GRID_SIZE;
 	int totalGrids = numberofGrids_X * numberofGrids_Y;
 	int numGridPerNode = ceil(totalGrids/numProcess);
-	double startGrid_X[NUM_MAX_PROCESS];
-	double startGrid_Y[NUM_MAX_PROCESS];
+	int startGrid_X[NUM_MAX_PROCESS];
+	int startGrid_Y[NUM_MAX_PROCESS];
 	// we create Grid Index per process
 	int grid_index[NUM_MAX_PROCESS];
 	// specify grid index for each process
 	grid_index[rankId] = rankId*numGridPerNode;
 
-	//assign starting X,Y grid point for each workers
-	startGrid_X[rankId] = minX_inputData+(int)(grid_index[rankId]%numberofGrids_X);
-	startGrid_Y[rankId] = minY_inputData+(int)floor(grid_index[rankId]/numberofGrids_X);
+	//we map grid_index to X,Y point to be used in the start of iteration per processor
+	startGrid_X[rankId] = (int)(grid_index[rankId]%numberofGrids_X);
+	startGrid_Y[rankId] = (int)floor(grid_index[rankId]/numberofGrids_X);
 
 	if(rankId==0) {
 		PRINTDEBUGMODE0( "Total process %d\n", numProcess);
@@ -179,10 +179,80 @@ int main(int argc, char *argv[]){
 		PRINTDEBUGMODE0("numGridsPerNode:%d\n",numGridPerNode);
 	}
 	PRINTDEBUGMODE0("grid_index[%d]:%d\n",rankId,grid_index[rankId]);
-	PRINTDEBUGMODE0("startGrid[%d]:(%2.2f,%2.2f)\n",rankId,startGrid_X[rankId],startGrid_Y[rankId]);
+	PRINTDEBUGMODE1("startGrid[%d]:(%2.2f,%2.2f)\n",rankId,startGrid_X[rankId],startGrid_Y[rankId]);
 
+	// Prepare buffer to store nodes in a grid within searchRange
+	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X));
+
+	PRINTDEBUGMODE1("malloc buffNodes_inOneGrid %d ...\n", rankId);
+	for(i=0;i<numberofGrids_X;i++){
+		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*numberofGrids_Y);
+		for(j=0;j<numberofGrids_Y;j++){
+			buffNodes_inOneGrid[i][j].next=NULL;
+		}
+		//FOR_DEBUG_PRINT("row_num:%d\n",i);FOR_DEBUG_PRINT("Load grid on memory\n");
+	}
+
+	// lets process data input one by one
+	int grid_idx;
+	for(i=0;i<dsize;i++){
+		double temp_gridX = (int)(x[i]-minX_inputData)/GRID_SIZE;
+		double temp_gridY = (int)(y[i]-minY_inputData)/GRID_SIZE;
+
+		for(grid_idx=0;grid_idx<numGridPerNode;grid_idx++){
+			//Find X,Y grid points
+			gridX = minX_inputData+((startGrid_X[rankId]+grid_idx*GRID_SIZE)%numberofGrids_X);
+			gridY = minY_inputData+startGrid_Y[rankId]+ceil((startGrid_X[rankId]+(grid_idx*GRID_SIZE))/numberofGrids_X);
+
+			double xrange = gridX-x[i];
+			if(xrange<0) xrange=-xrange;
+			double yrange = gridY-y[i];
+			if(yrange<0) yrange=-yrange;
+
+			//check whether input point is located within searchRange or not
+			if((xrange<searchRadius)&&(yrange<searchRadius)){
+				//lets store to buffer
+				cur = buffNodes_inOneGrid[(int)((int)(gridX-minX_inputData)/GRID_SIZE)][(int)((int)(gridY-minY_inputData)/GRID_SIZE)].next;
+
+				if(cur==NULL){
+					PRINTDEBUGMODE1("cur next NULL\n");
+					new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+					new_list->x = x[i];
+					new_list->y = y[i];
+					new_list->z = z[i];
+					new_list->next=NULL;
+
+					buffNodes_inOneGrid[((int)(gridX-minX_inputData)/GRID_SIZE)][((int)(gridY-minY_inputData)/GRID_SIZE)].next = new_list;
+				} else {
+					PRINTDEBUGMODE1("cur next NOT NULL\n");
+					while(cur->next!=NULL) {
+						cur = cur->next;
+					}
+
+					new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+					new_list->x = x[i];
+					new_list->y = y[i];
+					new_list->z = z[i];
+
+					new_list->next=NULL;
+					cur->next = new_list;
+				}
+			}
+			PRINTDEBUGMODE1("HORE\n");
+
+		}
+		PRINTDEBUGMODE1("BERHASIL\n");
+	}
+	free(x);
+	free(y);
+	free(z);
+
+	// TODO ngelanjutin
+	endTime = MPI_Wtime();
+	totalTime = endTime-startTime;
 	MPI_Finalize();
-	PRINTDEBUGMODE1( "Finished process %d at %s\n", rankId, hostname );
+	PRINTDEBUGMODE0( "Finished process %d at %s in %lf seconds\n", rankId, hostname, totalTime );
+
 	return 0;
 
 }
