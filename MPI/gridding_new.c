@@ -80,8 +80,6 @@ int main(int argc, char *argv[]){
 	double maxTime=0.0, maxGtime=0.0, maxSemitime=0.0, maxFitime=0.0, maxPtime=0.0;
 	double Gridsqure, progrssCnt=0;
 
-	double buffer_grid[BUF_SIZE][3];
-
 	//For variogram
 	double sum_SqurZ[nrbins+2], distDelta[nrbins+2];
 
@@ -104,7 +102,7 @@ int main(int argc, char *argv[]){
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rankId);
 	MPI_Comm_size(MPI_COMM_WORLD, &numProcess);
-	if(numProcess >= NUM_MAX_PROCESS){
+	if(numProcess > NUM_MAX_PROCESS){
 		printf("[ERROR] numProcess > NUM_MAX_PROCESS\n");
 		exit(0);
 	}
@@ -182,76 +180,165 @@ int main(int argc, char *argv[]){
 	PRINTDEBUGMODE1("startGrid[%d]:(%2.2f,%2.2f)\n",rankId,startGrid_X[rankId],startGrid_Y[rankId]);
 
 	// Prepare buffer to store nodes in a grid within searchRange
-	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X));
+	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X+1));
+	if(buffNodes_inOneGrid== NULL){
+		PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid\n");
+		exit(0);
+	}
 
 	PRINTDEBUGMODE1("malloc buffNodes_inOneGrid %d ...\n", rankId);
-	for(i=0;i<numberofGrids_X;i++){
-		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*numberofGrids_Y);
-		for(j=0;j<numberofGrids_Y;j++){
+	for(i=0;i<=numberofGrids_X;i++){
+		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*(numberofGrids_Y+1));
+		if(buffNodes_inOneGrid[i] == NULL){
+			PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid[i]  \n");
+			exit(0);
+		}
+		for(j=0;j<=numberofGrids_Y;j++){
 			buffNodes_inOneGrid[i][j].next=NULL;
 		}
 		//FOR_DEBUG_PRINT("row_num:%d\n",i);FOR_DEBUG_PRINT("Load grid on memory\n");
 	}
 
-	// lets process data input one by one
+
 	int grid_idx;
-	for(i=0;i<dsize;i++){
-		double temp_gridX = (int)(x[i]-minX_inputData)/GRID_SIZE;
-		double temp_gridY = (int)(y[i]-minY_inputData)/GRID_SIZE;
-
-		for(grid_idx=0;grid_idx<numGridPerNode;grid_idx++){
-			//Find X,Y grid points
-			gridX = minX_inputData+((startGrid_X[rankId]+grid_idx*GRID_SIZE)%numberofGrids_X);
-			gridY = minY_inputData+startGrid_Y[rankId]+ceil((startGrid_X[rankId]+(grid_idx*GRID_SIZE))/numberofGrids_X);
-
-			double xrange = gridX-x[i];
-			if(xrange<0) xrange=-xrange;
-			double yrange = gridY-y[i];
-			if(yrange<0) yrange=-yrange;
-
-			//check whether input point is located within searchRange or not
-			if((xrange<searchRadius)&&(yrange<searchRadius)){
-				//lets store to buffer
-				cur = buffNodes_inOneGrid[(int)((int)(gridX-minX_inputData)/GRID_SIZE)][(int)((int)(gridY-minY_inputData)/GRID_SIZE)].next;
-
-				if(cur==NULL){
-					PRINTDEBUGMODE1("cur next NULL\n");
-					new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
-					new_list->x = x[i];
-					new_list->y = y[i];
-					new_list->z = z[i];
-					new_list->next=NULL;
-
-					buffNodes_inOneGrid[((int)(gridX-minX_inputData)/GRID_SIZE)][((int)(gridY-minY_inputData)/GRID_SIZE)].next = new_list;
-				} else {
-					PRINTDEBUGMODE1("cur next NOT NULL\n");
-					while(cur->next!=NULL) {
-						cur = cur->next;
-					}
-
-					new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
-					new_list->x = x[i];
-					new_list->y = y[i];
-					new_list->z = z[i];
-
-					new_list->next=NULL;
-					cur->next = new_list;
-				}
-			}
-			PRINTDEBUGMODE1("HORE\n");
-
-		}
-		PRINTDEBUGMODE1("BERHASIL\n");
+	//optimation per process
+	int tempsize = dsize;
+	while((tempsize%numProcess)!=0){
+		tempsize--;
 	}
+
+	PRINTDEBUGMODE1("numProcess: %d\n",numProcess);
+	PRINTDEBUGMODE1("tempsize: %d\n",tempsize);
+
+	/* lets process data input one by one :
+	 * hint :  One input point will be places to only one closest grid point
+	 * */
+
+	int numInputdataPerProcessor = tempsize/numProcess; //equally divide jobs from each worker
+	PRINTDEBUGMODE1("numInputdataPerProcessor: %d\n",numInputdataPerProcessor);
+	for(i=0;i<numInputdataPerProcessor;i++){ //148355
+		//divide input data based on rankId on each processor(worker)
+		int idx_datainput = i+rankId*numInputdataPerProcessor;
+		if(idx_datainput<dsize){
+			//find a closest grid point from an input data
+			int lower_gridX = (int)floor(x[idx_datainput]);
+			int upper_gridX = (int)ceil(x[idx_datainput]);
+			int lower_gridY = (int)floor(y[idx_datainput]);
+			int upper_gridY = (int)ceil(y[idx_datainput]);
+			double closest_gridpointX;
+			double closest_gridpointY;
+
+			while((lower_gridX%GRID_SIZE)!=0){
+				lower_gridX--;
+			}
+
+			while((upper_gridX%GRID_SIZE)!=0){
+				upper_gridX++;
+			}
+
+			while((lower_gridY%GRID_SIZE)!=0){
+				lower_gridY--;
+			}
+
+			while((upper_gridY%GRID_SIZE)!=0){
+				upper_gridY++;
+			}
+
+			if((sqrt(pow(x[idx_datainput]-lower_gridX,2)+pow(y[idx_datainput]-lower_gridY,2)))<
+					(sqrt(pow(x[idx_datainput]-upper_gridX,2)+pow(y[idx_datainput]-upper_gridY,2))) ){
+				closest_gridpointX = lower_gridX;
+				closest_gridpointY = lower_gridY;
+			}else{
+				closest_gridpointX = upper_gridX;
+				closest_gridpointY = upper_gridY;
+			}
+
+			//TODO iterate this closest grid point within a searchRange
+			PRINTDEBUGMODE1("closest_gridpointX:%lf\n",closest_gridpointX);
+			PRINTDEBUGMODE1("closest_gridpointY:%lf\n",closest_gridpointY);
+
+			//ensure that still inside boundary area
+			if((closest_gridpointX>=minX_inputData)&&(closest_gridpointY>=minY_inputData)&&(closest_gridpointX<=maxX_inputData)&&(closest_gridpointY<=maxY_inputData)){
+
+				if(((closest_gridpointX-minX_inputData)/GRID_SIZE)>= numberofGrids_X){
+					PRINTDEBUGMODE1("HOREWWWW X\n");
+				}
+				if(((closest_gridpointY-minY_inputData)/GRID_SIZE)>= numberofGrids_Y){
+					PRINTDEBUGMODE1("HOREWWWW Y\n");
+				}
+
+				int idx_x = (int)(closest_gridpointX-minX_inputData)/GRID_SIZE;
+				int idx_y = (int)(closest_gridpointY-minY_inputData)/GRID_SIZE;
+				PRINTDEBUGMODE1("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
+				if((idx_y <0)|(idx_x) <0|(idx_x > numberofGrids_X)|(idx_y > numberofGrids_Y)){
+					PRINTDEBUGMODE0("Naaaaaaaaaaaaaaaah");
+				}
+
+
+				if(buffNodes_inOneGrid[idx_x]!=NULL){
+
+					cur = buffNodes_inOneGrid[idx_x][idx_y].next;
+
+					if(cur==NULL){
+						PRINTDEBUGMODE1("cur next NULL\n");
+						new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+						new_list->x = x[idx_datainput];
+						new_list->y = y[idx_datainput];
+						new_list->z = z[idx_datainput];
+						new_list->next=NULL;
+
+						buffNodes_inOneGrid[idx_x][idx_y].next = new_list;
+					} else {
+						PRINTDEBUGMODE1("cur next NOT NULL\n");
+						while(cur->next!=NULL) {
+							cur = cur->next;
+						}
+						new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+						new_list->x = x[idx_datainput];
+						new_list->y = y[idx_datainput];
+						new_list->z = z[idx_datainput];
+
+						new_list->next=NULL;
+						cur->next = new_list;
+					}
+				}else{
+					//there must be some bug if this happened --> ussually malloc failed
+					PRINTDEBUGMODE0("[ERROR] ANOTHER BUG\n");
+					PRINTDEBUGMODE0("X:%d; Y:%d\n",idx_x,idx_y);
+					PRINTDEBUGMODE0("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
+				}
+
+			}
+		}
+		else{
+			PRINTDEBUGMODE0("idx_datainput:%d\n",idx_datainput);
+		}
+	}
+
 	free(x);
 	free(y);
 	free(z);
 
-	// TODO ngelanjutin
+	/**
+	 * Gridding, Semi-Variogram, Prediction Process is here
+	 */
+
+	PRINTDEBUGMODE1("Start Gridding Process ... \n");
+	// Divide number of grids with the available process/workers
+	for(i=0;i<= numGridPerNode;i++){
+		int idx_grid =i+rankId*numGridPerNode;
+		if(idx_grid<numberofGrids_X*numberofGrids_Y){
+
+		}
+	}
+
+
 	endTime = MPI_Wtime();
 	totalTime = endTime-startTime;
 	MPI_Finalize();
+
 	PRINTDEBUGMODE0( "Finished process %d at %s in %lf seconds\n", rankId, hostname, totalTime );
+
 
 	return 0;
 
