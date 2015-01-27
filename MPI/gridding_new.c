@@ -25,13 +25,13 @@
 #endif
 
 #define NUM_MAX_PROCESS 12
-#define GRID_SIZE 1
+#define GRID_SIZE 10
 #define BUF_SIZE 200000
 
 void findMinMax();
 char* itoa();
 void CalDistPointfromGrid();
-double Eculidean();
+double Euclidean();
 
 double minX=0.0, minY=0.0, maxX=0.0, maxY=0.0;
 //Lidar Data mapped grid
@@ -60,44 +60,26 @@ int main(int argc, char *argv[]){
 	int bufflen = 512;
 	char hostname[bufflen];
 
-	int i, j, k, p;
-	int dsize=0, quotient=0, extra=0, avgrows=0;
-	int nrbins = 50, nrSubbins = 100, sameIdxCnt;
-	double *x, *y, *z, *t, *distBins, **ptopDist;
+	int i, j, k, p, q;
+	int flag=0;
+	int dsize=0;
+	int nrbins = 50;
+	double *x, *y, *z, **ptopDist;
 	//double maxD;
-	int minX_inputData, minY_inputData, maxX_inputData, maxY_inputData, gridXrange, gridYrange, gridXsize, gridYsize;
+	int minX_inputData, minY_inputData, maxX_inputData, maxY_inputData, gridXrange, gridYrange;
 	int numberofGrids_X, numberofGrids_Y;
-	double gridX, gridY;
-	int startX, startY, endX, endY, XofGrid, YofGrid;
-	int NNendX, NNendY;
-	int alphaGridX, alphaGridY;
-	int radX, radY, idxOfRadius=0, searchRadius=3, numOfNearestPoint=10;//for radius
-	int cnt_point=0, cardinal_direction;//0:x++ 1:y++ 2:x-- 3:y--
-	int divYsize, totlaPoints=0;
-	double delta, sumZ, maxDistance;
-	double startTime, endTime, stGtime, endGtime, stSemitime, endSemitime, stFitime, endFitime, stPtime, endPtime;
-	double totalGtime=0.0, totalSemitime=0.0, totalFitime=0.0, totalPtime=0.0, totalTime=0.0;
-	double maxTime=0.0, maxGtime=0.0, maxSemitime=0.0, maxFitime=0.0, maxPtime=0.0;
-	double Gridsqure, progrssCnt=0;
+	int searchRadius=3;//for radius
+	double maxDistance;
+	double startTime, endTime;
+	double  totalTime=0.0;
 
 	//For variogram
 	double sum_SqurZ[nrbins+2], distDelta[nrbins+2];
 
-	char charRank[4];
-	char path[50]="/home/mpiuser/Documents/PointInGrid";
-	char path_p[50]="/nfs/code/ksy/output/PredictionPerGrid";
+	char path_p[50]="/nfs/code/mata/output/PredictionPerGrid";
 	char fileType[] = ".txt";
-	FILE *fpdata=NULL, *ferr=NULL, *file_out=NULL;
+	FILE *fpdata=NULL;
 	FILE *fPrediction=NULL;
-
-	struct Info_vario *Info_v;
-
-	int msg=0;
-
-	MPI_Request req;
-	MPI_Status status;
-	MPI_File thefile;
-	MPI_Offset fileOffset;
 
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rankId);
@@ -149,10 +131,6 @@ int main(int argc, char *argv[]){
 	}
 	minX_inputData = (int)floor(minX);	maxX_inputData = (int)ceil(maxX);	minY_inputData = (int)floor(minY);	maxY_inputData = (int)ceil(maxY);
 	gridXrange = maxX_inputData-minX_inputData; gridYrange = maxY_inputData-minY_inputData;
-	if((((int)gridXrange % GRID_SIZE)!=0 )|(((int)gridYrange % GRID_SIZE)!=0)){
-		printf("[ERROR] (gridXrange % GRID_SIZE)!=0 )|((gridYrange / GRID_SIZE)!=0)\n");
-		exit(0);
-	}
 	numberofGrids_X = gridXrange / GRID_SIZE; numberofGrids_Y = gridYrange / GRID_SIZE;
 	int totalGrids = numberofGrids_X * numberofGrids_Y;
 	int numGridPerNode = ceil(totalGrids/numProcess);
@@ -167,7 +145,7 @@ int main(int argc, char *argv[]){
 	startGrid_X[rankId] = (int)(grid_index[rankId]%numberofGrids_X);
 	startGrid_Y[rankId] = (int)floor(grid_index[rankId]/numberofGrids_X);
 
-	if(rankId==0) {
+	if(rankId==0) {//choose the faster processor
 		PRINTDEBUGMODE0( "Total process %d\n", numProcess);
 		PRINTDEBUGMODE0(" min X: %d; max X: %d \n min Y: %d max Y: %d\n", minX_inputData, maxX_inputData, minY_inputData, maxY_inputData);
 		PRINTDEBUGMODE0("GRID_SIZE : %2.2f meter\n",(double)GRID_SIZE);
@@ -176,11 +154,11 @@ int main(int argc, char *argv[]){
 		PRINTDEBUGMODE0("totalGrids:%d\n",totalGrids);
 		PRINTDEBUGMODE0("numGridsPerNode:%d\n",numGridPerNode);
 	}
-	PRINTDEBUGMODE0("grid_index[%d]:%d\n",rankId,grid_index[rankId]);
+	PRINTDEBUGMODE1("grid_index[%d]:%d\n",rankId,grid_index[rankId]);
 	PRINTDEBUGMODE1("startGrid[%d]:(%2.2f,%2.2f)\n",rankId,startGrid_X[rankId],startGrid_Y[rankId]);
 
 	// Prepare buffer to store nodes in a grid within searchRange
-	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X+1));
+	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X+1)); // assume that boundary X axis in also grid point
 	if(buffNodes_inOneGrid== NULL){
 		PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid\n");
 		exit(0);
@@ -188,7 +166,7 @@ int main(int argc, char *argv[]){
 
 	PRINTDEBUGMODE1("malloc buffNodes_inOneGrid %d ...\n", rankId);
 	for(i=0;i<=numberofGrids_X;i++){
-		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*(numberofGrids_Y+1));
+		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*(numberofGrids_Y+1)); // assume that boundary Y axis in also grid point
 		if(buffNodes_inOneGrid[i] == NULL){
 			PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid[i]  \n");
 			exit(0);
@@ -199,8 +177,6 @@ int main(int argc, char *argv[]){
 		//FOR_DEBUG_PRINT("row_num:%d\n",i);FOR_DEBUG_PRINT("Load grid on memory\n");
 	}
 
-
-	int grid_idx;
 	//optimation per process
 	int tempsize = dsize;
 	while((tempsize%numProcess)!=0){
@@ -228,20 +204,23 @@ int main(int argc, char *argv[]){
 			double closest_gridpointX;
 			double closest_gridpointY;
 
-			while((lower_gridX%GRID_SIZE)!=0){
-				lower_gridX--;
-			}
+			if(GRID_SIZE >= 1){
+				int gridsize_var= GRID_SIZE;
+				while((int)(lower_gridX%gridsize_var)!=0){
+					lower_gridX--;
+				}
 
-			while((upper_gridX%GRID_SIZE)!=0){
-				upper_gridX++;
-			}
+				while((int)(upper_gridX%gridsize_var)!=0){
+					upper_gridX++;
+				}
 
-			while((lower_gridY%GRID_SIZE)!=0){
-				lower_gridY--;
-			}
+				while((int)(lower_gridY%gridsize_var)!=0){
+					lower_gridY--;
+				}
 
-			while((upper_gridY%GRID_SIZE)!=0){
-				upper_gridY++;
+				while((int)(upper_gridY%gridsize_var)!=0){
+					upper_gridY++;
+				}
 			}
 
 			if((sqrt(pow(x[idx_datainput]-lower_gridX,2)+pow(y[idx_datainput]-lower_gridY,2)))<
@@ -270,10 +249,6 @@ int main(int argc, char *argv[]){
 				int idx_x = (int)(closest_gridpointX-minX_inputData)/GRID_SIZE;
 				int idx_y = (int)(closest_gridpointY-minY_inputData)/GRID_SIZE;
 				PRINTDEBUGMODE1("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
-				if((idx_y <0)|(idx_x) <0|(idx_x > numberofGrids_X)|(idx_y > numberofGrids_Y)){
-					PRINTDEBUGMODE0("Naaaaaaaaaaaaaaaah");
-				}
-
 
 				if(buffNodes_inOneGrid[idx_x]!=NULL){
 
@@ -322,12 +297,80 @@ int main(int argc, char *argv[]){
 	/**
 	 * Gridding, Semi-Variogram, Prediction Process is here
 	 */
+	strcat(path_p,itoa(rankId,10));
+	strcat(path_p,fileType);
+	fPrediction = fopen(path_p,"w");
 
 	PRINTDEBUGMODE1("Start Gridding Process ... \n");
 	// Divide number of grids with the available process/workers
-	for(i=0;i<= numGridPerNode;i++){
-		int idx_grid =i+rankId*numGridPerNode;
+	for(p=0;p< numGridPerNode;p++){
+		int idx_grid =p+rankId*numGridPerNode;
 		if(idx_grid<numberofGrids_X*numberofGrids_Y){
+			int idx_x = idx_grid%numberofGrids_X;
+			int idx_y = (int) idx_grid/numberofGrids_Y;
+			int temp_idx_x = idx_x;
+			int temp_idx_y = idx_y;
+
+			//iterate based on search range & collect in a linked list
+			int points_counter = 0;
+			minX=0.0, minY=0.0, maxX=0.0, maxY=0.0;
+			if(GRID_SIZE<searchRadius){
+				idx_x = idx_x-searchRadius;
+				idx_y = idx_y-searchRadius;
+				for(i=0;i<searchRadius;i++){
+					for(j=0;j<searchRadius;j++){
+						if((idx_x+i)>=0 && ((idx_x+i) < numberofGrids_X) && (idx_y+j)>=0 && (idx_y+j) < numberofGrids_Y) { //while still inside boundary of grids
+							CalDistPointfromGrid(idx_x+i,idx_y+j, &points_counter);
+						}
+					}
+				}
+			}else{
+				CalDistPointfromGrid(idx_x,idx_y, &points_counter);
+			}
+
+			PRINTDEBUGMODE1("point_counter :%d\n",points_counter);
+
+			//calculate variogram
+			maxDistance = sqrt(pow(maxX-minX,2)+pow(maxY-minY,2));
+			maxDistance = maxDistance/2;
+
+			points_counter = points_counter+1;
+			ptopDist = (double**)malloc(sizeof(double*)*points_counter);
+			for(k=0;k<points_counter;k++) {
+				ptopDist[k] = (double*)malloc(sizeof(double)*points_counter);
+			}
+			//initialize with 0 value
+			for(k=0;k<points_counter;k++) {
+				for(q=0;q<points_counter;q++) {
+					ptopDist[k][q] = 0.0;
+				}
+			}
+			//calculate semivariogram
+			FindSemivar(Head_distfromGrid, nrbins, sum_SqurZ, maxDistance, distDelta, ptopDist);
+
+			double range, sill;
+			//Fitting process with model
+			FitSemivariogram(sum_SqurZ, distDelta, nrbins, &range, &sill);
+
+			//Prediction
+			double coord_gridX = minX_inputData + temp_idx_x*GRID_SIZE;
+			double coord_gridY = minY_inputData + temp_idx_y*GRID_SIZE;
+			Prediction(Head_distfromGrid, points_counter, range, sill, rankId, ptopDist, coord_gridX, coord_gridY, fPrediction);
+
+			//free memory
+			for(k=0;k<points_counter;k++) {
+				free(ptopDist[k]);
+			}
+			free(ptopDist);
+
+			Cur_DistfromGrid = Head_distfromGrid;
+			while(Cur_DistfromGrid!=NULL) {
+				ForFree_DistfromGrid = Cur_DistfromGrid;
+				Cur_DistfromGrid = Cur_DistfromGrid -> next;
+				free(ForFree_DistfromGrid);
+			}
+			Head_distfromGrid=NULL;
+			Tail_DistfromGrid=NULL;
 
 		}
 	}
@@ -339,9 +382,46 @@ int main(int argc, char *argv[]){
 
 	PRINTDEBUGMODE0( "Finished process %d at %s in %lf seconds\n", rankId, hostname, totalTime );
 
+	int temp_numProc=0;
+	for(i=0;i<numProcess;i++){
+		temp_numProc = temp_numProc+i;
+	}
 
+	flag = flag + rankId;
+	if(flag == temp_numProc){
+		char path_output[]="cat ../../mata/output/* > ";
+		strcat(path_output,"result.txt");
+		system(path_output);
+	}
 	return 0;
 
+}
+
+void CalDistPointfromGrid(int gridIdx_X, int gridIdx_Y, int* pCnt) {
+	cur = buffNodes_inOneGrid[gridIdx_X][gridIdx_Y].next;
+	if(cur!=NULL) {
+		PRINTDEBUGMODE1("around[%d][%d]\n",gridIdx_X,gridIdx_Y);
+		//FOR_DEBUG_PRINT("x %lf, y %lf\n", (double)i+(double)GRID_SIZE/2,(double)j+(double)GRID_SIZE/2);
+		while(cur!=NULL){
+			findMinMax(cur->x, cur->y);
+			(*pCnt)++;
+			if(Head_distfromGrid==NULL) {
+				Head_distfromGrid = (Distnode*)malloc(sizeof(struct Dist_Node));
+				Head_distfromGrid -> coord = cur;
+				Head_distfromGrid -> next = NULL;
+				Tail_DistfromGrid = Head_distfromGrid;
+			} else {
+				Cur_DistfromGrid = (Distnode*)malloc(sizeof(struct Dist_Node));
+				Cur_DistfromGrid -> coord = cur;
+				Cur_DistfromGrid -> next = NULL;
+				Tail_DistfromGrid-> next = Cur_DistfromGrid;
+				Tail_DistfromGrid = Cur_DistfromGrid;
+			}
+			cur = cur->next;
+		}
+	} else {
+		PRINTDEBUGMODE1("NO POINT IN THIS GRID \n");
+	}
 }
 
 void findMinMax (double x, double y){
@@ -360,4 +440,15 @@ void findMinMax (double x, double y){
 		maxX = x;
 	if(maxY<y)
 		maxY = y;
+}
+
+char* itoa(int val, int base) {
+	// check that the base if valid
+	static char buf[32] = {0};
+	int i = 30;
+	for(; val && i ; --i, val /= base)
+
+		buf[i] = "0123456789abcdef"[val % base];
+
+	return &buf[i+1];
 }
