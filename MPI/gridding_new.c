@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
+#include <errno.h>
+#include <limits.h>
 #include <malloc.h>
 #include <string.h>
 
@@ -25,7 +27,7 @@
 #endif
 
 #define NUM_MAX_PROCESS 12
-#define GRID_SIZE 10
+
 #define BUF_SIZE 200000
 
 void findMinMax();
@@ -34,6 +36,7 @@ void CalDistPointfromGrid();
 double Euclidean();
 
 double minX=0.0, minY=0.0, maxX=0.0, maxY=0.0;
+
 //Lidar Data mapped grid
 //Info_Grid *startGrid=NULL;
 PointerOfGrid **buffNodes_inOneGrid=NULL;
@@ -56,10 +59,25 @@ Distnode *tmp_Sort=NULL;
 
 int main(int argc, char *argv[]){
 
+	//check validity of input arguments
+	if(argc!=4){
+		PRINTDEBUGMODE0("[ERROR] Please check number of arguments!\n");
+		PRINTDEBUGMODE0("Application <gridsizes(m)> <searchRadius(m)> <PathtoTheInputFile.txt>\n");
+		PRINTDEBUGMODE0("argv[1]:%s\n",argv[1]);
+		PRINTDEBUGMODE0("argv[2]:%s\n",argv[2]);
+		PRINTDEBUGMODE0("argv[3]:%s\n",argv[3]);
+		exit(0);
+	}
+
+	double GRID_SIZE = strtol(argv[1],NULL,10);
+	int searchRadius = strtol(argv[2],NULL,10);//for radius
+	char *filename = argv[3];
+
+	char path_p[50]="/nfs/code/mata/output/PredictionPerGrid";
+
 	int rankId, numProcess;
 	int bufflen = 512;
 	char hostname[bufflen];
-
 	int i, j, k, p, q;
 	int flag=0;
 	int dsize=0;
@@ -68,7 +86,6 @@ int main(int argc, char *argv[]){
 	//double maxD;
 	int minX_inputData, minY_inputData, maxX_inputData, maxY_inputData, gridXrange, gridYrange;
 	int numberofGrids_X, numberofGrids_Y;
-	int searchRadius=3;//for radius
 	double maxDistance;
 	double startTime, endTime;
 	double  totalTime=0.0;
@@ -76,7 +93,7 @@ int main(int argc, char *argv[]){
 	//For variogram
 	double sum_SqurZ[nrbins+2], distDelta[nrbins+2];
 
-	char path_p[50]="/nfs/code/mata/output/PredictionPerGrid";
+
 	char fileType[] = ".txt";
 	FILE *fpdata=NULL;
 	FILE *fPrediction=NULL;
@@ -90,7 +107,6 @@ int main(int argc, char *argv[]){
 	}
 
 	startTime=MPI_Wtime();
-	static const char filename[] = "/nfs/code/ksy/data/Data3_XYZ_Ground.txt";
 
 	/*===================== Read Data =============================*/
 	FILE *file = fopen ( filename, "r" );
@@ -107,6 +123,7 @@ int main(int argc, char *argv[]){
 	}
 	else
 	{
+		printf("[ERROR] Invalid input Path\n");
 		perror ( filename ); /* why didn't the file open? */
 	}
 
@@ -146,13 +163,16 @@ int main(int argc, char *argv[]){
 	startGrid_Y[rankId] = (int)floor(grid_index[rankId]/numberofGrids_X);
 
 	if(rankId==0) {//choose the faster processor
-		PRINTDEBUGMODE0( "Total process %d\n", numProcess);
-		PRINTDEBUGMODE0(" min X: %d; max X: %d \n min Y: %d max Y: %d\n", minX_inputData, maxX_inputData, minY_inputData, maxY_inputData);
-		PRINTDEBUGMODE0("GRID_SIZE : %2.2f meter\n",(double)GRID_SIZE);
-		PRINTDEBUGMODE0("GRIDrange X:%d; GRIDrange Y:%d\n", gridXrange, gridYrange);
-		PRINTDEBUGMODE0("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
-		PRINTDEBUGMODE0("totalGrids:%d\n",totalGrids);
-		PRINTDEBUGMODE0("numGridsPerNode:%d\n",numGridPerNode);
+		PRINTDEBUGMODE0("-----------------------------------------------\n");
+		PRINTDEBUGMODE0(" Total processors (workers)  : %d\n", numProcess);
+		PRINTDEBUGMODE0(" Number of Input LiDAR data  : %d\n",dsize);
+		PRINTDEBUGMODE0("  min (%d,%d)\n max (%d,%d)\n", minX_inputData, minY_inputData,maxX_inputData, maxY_inputData);
+		PRINTDEBUGMODE0(" GRID_SIZE                   : %2.2f meter(s)\n",(double)GRID_SIZE);
+		PRINTDEBUGMODE0(" GRIDrange (X,Y)             : (%d,%d)\n", gridXrange, gridYrange);
+		PRINTDEBUGMODE0(" numberofGrids (X,Y)         : (%d,%d)\n", numberofGrids_X, numberofGrids_Y);
+		PRINTDEBUGMODE0(" Total available Grids       : %d\n",totalGrids);
+		PRINTDEBUGMODE0(" NumGridsPerNode             : %d\n",numGridPerNode);
+		PRINTDEBUGMODE0("-----------------------------------------------\n");
 	}
 	PRINTDEBUGMODE1("grid_index[%d]:%d\n",rankId,grid_index[rankId]);
 	PRINTDEBUGMODE1("startGrid[%d]:(%2.2f,%2.2f)\n",rankId,startGrid_X[rankId],startGrid_Y[rankId]);
