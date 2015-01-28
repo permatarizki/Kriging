@@ -69,7 +69,12 @@ int main(int argc, char *argv[]){
 		exit(0);
 	}
 
-	double GRID_SIZE = strtol(argv[1],NULL,10);
+	long temp_gridsize = atol(argv[1]);
+
+	double GRID_SIZE = (double) temp_gridsize ;
+	if(GRID_SIZE<1) GRID_SIZE = 0.5; //hard code for parsing args < 1
+	PRINTDEBUGMODE1("tempgrid:%lu\n",temp_gridsize);
+	PRINTDEBUGMODE1("GRIDSIZE:%2.2f\n",GRID_SIZE);
 	int searchRadius = strtol(argv[2],NULL,10);//for radius
 	char *filename = argv[3];
 
@@ -82,7 +87,7 @@ int main(int argc, char *argv[]){
 	int flag=0;
 	int dsize=0;
 	int nrbins = 50;
-	double *x, *y, *z, **ptopDist;
+	double *x=NULL, *y=NULL, *z=NULL, **ptopDist;
 	//double maxD;
 	int minX_inputData, minY_inputData, maxX_inputData, maxY_inputData, gridXrange, gridYrange;
 	int numberofGrids_X, numberofGrids_Y;
@@ -134,6 +139,10 @@ int main(int argc, char *argv[]){
 	x = (double*)malloc(sizeof(double)*dsize);
 	y = (double*)malloc(sizeof(double)*dsize);
 	z = (double*)malloc(sizeof(double)*dsize);
+	if(x==NULL | y==NULL | z==NULL){
+		printf("[error malloc] X Y Z\n");
+		exit(0);
+	}
 
 	fseek(fpdata,0,SEEK_SET);
 	gethostname(hostname, bufflen);
@@ -166,7 +175,7 @@ int main(int argc, char *argv[]){
 		PRINTDEBUGMODE0("-----------------------------------------------\n");
 		PRINTDEBUGMODE0(" Total processors (workers)  : %d\n", numProcess);
 		PRINTDEBUGMODE0(" Number of Input LiDAR data  : %d\n",dsize);
-		PRINTDEBUGMODE0("  min (%d,%d)\n max (%d,%d)\n", minX_inputData, minY_inputData,maxX_inputData, maxY_inputData);
+		PRINTDEBUGMODE0("  min (%d,%d)\n  max (%d,%d)\n", minX_inputData, minY_inputData,maxX_inputData, maxY_inputData);
 		PRINTDEBUGMODE0(" GRID_SIZE                   : %2.2f meter(s)\n",(double)GRID_SIZE);
 		PRINTDEBUGMODE0(" GRIDrange (X,Y)             : (%d,%d)\n", gridXrange, gridYrange);
 		PRINTDEBUGMODE0(" numberofGrids (X,Y)         : (%d,%d)\n", numberofGrids_X, numberofGrids_Y);
@@ -180,7 +189,7 @@ int main(int argc, char *argv[]){
 	// Prepare buffer to store nodes in a grid within searchRange
 	buffNodes_inOneGrid = (PointerOfGrid**)malloc(sizeof(PointerOfGrid*)*(numberofGrids_X+1)); // assume that boundary X axis in also grid point
 	if(buffNodes_inOneGrid== NULL){
-		PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid\n");
+		printf("[malloc error] cannot allocate %d buffNodes_inOneGrid_X\n", numberofGrids_X+1);
 		exit(0);
 	}
 
@@ -188,7 +197,7 @@ int main(int argc, char *argv[]){
 	for(i=0;i<=numberofGrids_X;i++){
 		buffNodes_inOneGrid[i] = (PointerOfGrid*)malloc(sizeof(PointerOfGrid)*(numberofGrids_Y+1)); // assume that boundary Y axis in also grid point
 		if(buffNodes_inOneGrid[i] == NULL){
-			PRINTDEBUGMODE0("malloc error buffNodes_inOneGrid[i]  \n");
+			printf("[malloc error] cannot allocate %d buffNodes_inOneGrid_Y  \n", numberofGrids_Y+1);
 			exit(0);
 		}
 		for(j=0;j<=numberofGrids_Y;j++){
@@ -335,15 +344,18 @@ int main(int argc, char *argv[]){
 			int points_counter = 0;
 			minX=0.0, minY=0.0, maxX=0.0, maxY=0.0;
 			if(GRID_SIZE<searchRadius){
-				idx_x = idx_x-searchRadius;
-				idx_y = idx_y-searchRadius;
-				for(i=0;i<searchRadius;i++){
-					for(j=0;j<searchRadius;j++){
+				//TODO FIX this bug
+				int max_loop = (int)ceil(searchRadius/GRID_SIZE);
+				idx_x = idx_x-max_loop;
+				idx_y = idx_y-max_loop;
+				for(i=0;i<2*max_loop;i++){
+					for(j=0;j<2*max_loop;j++){
 						if((idx_x+i)>=0 && ((idx_x+i) < numberofGrids_X) && (idx_y+j)>=0 && (idx_y+j) < numberofGrids_Y) { //while still inside boundary of grids
 							CalDistPointfromGrid(idx_x+i,idx_y+j, &points_counter);
 						}
 					}
 				}
+
 			}else{
 				CalDistPointfromGrid(idx_x,idx_y, &points_counter);
 			}
