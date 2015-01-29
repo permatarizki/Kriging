@@ -160,16 +160,6 @@ int main(int argc, char *argv[]){
 	numberofGrids_X = gridXrange / GRID_SIZE; numberofGrids_Y = gridYrange / GRID_SIZE;
 	int totalGrids = numberofGrids_X * numberofGrids_Y;
 	int numGridPerNode = ceil(totalGrids/numProcess);
-	int startGrid_X[NUM_MAX_PROCESS];
-	int startGrid_Y[NUM_MAX_PROCESS];
-	// we create Grid Index per process
-	int grid_index[NUM_MAX_PROCESS];
-	// specify grid index for each process
-	grid_index[rankId] = rankId*numGridPerNode;
-
-	//we map grid_index to X,Y point to be used in the start of iteration per processor
-	startGrid_X[rankId] = (int)(grid_index[rankId]%numberofGrids_X);
-	startGrid_Y[rankId] = (int)floor(grid_index[rankId]/numberofGrids_X);
 
 	if(rankId==0) {//choose the faster processor
 		PRINTDEBUGMODE0("-----------------------------------------------\n");
@@ -177,6 +167,7 @@ int main(int argc, char *argv[]){
 		PRINTDEBUGMODE0(" Number of Input LiDAR data  : %d\n",dsize);
 		PRINTDEBUGMODE0("  min (%d,%d)\n  max (%d,%d)\n", minX_inputData, minY_inputData,maxX_inputData, maxY_inputData);
 		PRINTDEBUGMODE0(" GRID_SIZE                   : %2.2f meter(s)\n",(double)GRID_SIZE);
+		PRINTDEBUGMODE0(" SearchRadius                : %d meter(s)\n",searchRadius);
 		PRINTDEBUGMODE0(" GRIDrange (X,Y)             : (%d,%d)\n", gridXrange, gridYrange);
 		PRINTDEBUGMODE0(" numberofGrids (X,Y)         : (%d,%d)\n", numberofGrids_X, numberofGrids_Y);
 		PRINTDEBUGMODE0(" Total available Grids       : %d\n",totalGrids);
@@ -221,9 +212,9 @@ int main(int argc, char *argv[]){
 
 	int numInputdataPerProcessor = tempsize/numProcess; //equally divide jobs from each worker
 	PRINTDEBUGMODE1("numInputdataPerProcessor: %d\n",numInputdataPerProcessor);
-	for(i=0;i<numInputdataPerProcessor;i++){ //148355
+	for(i=0;i<dsize;i++){ //148355
 		//divide input data based on rankId on each processor(worker)
-		int idx_datainput = i+rankId*numInputdataPerProcessor;
+		int idx_datainput = i;//+rankId*numInputdataPerProcessor;
 		if(idx_datainput<dsize){
 			//find a closest grid point from an input data
 			int lower_gridX = (int)floor(x[idx_datainput]);
@@ -275,42 +266,45 @@ int main(int argc, char *argv[]){
 					PRINTDEBUGMODE1("HOREWWWW Y\n");
 				}
 
-				int idx_x = (int)(closest_gridpointX-minX_inputData)/GRID_SIZE;
-				int idx_y = (int)(closest_gridpointY-minY_inputData)/GRID_SIZE;
-				PRINTDEBUGMODE1("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
+				if((abs(closest_gridpointX-x[idx_datainput])<searchRadius) && (abs(closest_gridpointY-y[idx_datainput])<searchRadius)){
+					int idx_x = (int)(closest_gridpointX-minX_inputData)/GRID_SIZE;
+					int idx_y = (int)(closest_gridpointY-minY_inputData)/GRID_SIZE;
+					PRINTDEBUGMODE1("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
 
-				if(buffNodes_inOneGrid[idx_x]!=NULL){
+					if(buffNodes_inOneGrid[idx_x]!=NULL){
 
-					cur = buffNodes_inOneGrid[idx_x][idx_y].next;
+						cur = buffNodes_inOneGrid[idx_x][idx_y].next;
 
-					if(cur==NULL){
-						PRINTDEBUGMODE1("cur next NULL\n");
-						new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
-						new_list->x = x[idx_datainput];
-						new_list->y = y[idx_datainput];
-						new_list->z = z[idx_datainput];
-						new_list->next=NULL;
+						if(cur==NULL){
+							PRINTDEBUGMODE1("cur next NULL\n");
+							new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+							new_list->x = x[idx_datainput];
+							new_list->y = y[idx_datainput];
+							new_list->z = z[idx_datainput];
+							new_list->next=NULL;
 
-						buffNodes_inOneGrid[idx_x][idx_y].next = new_list;
-					} else {
-						PRINTDEBUGMODE1("cur next NOT NULL\n");
-						while(cur->next!=NULL) {
-							cur = cur->next;
+							buffNodes_inOneGrid[idx_x][idx_y].next = new_list;
+						} else {
+							PRINTDEBUGMODE1("cur next NOT NULL\n");
+							while(cur->next!=NULL) {
+								cur = cur->next;
+							}
+							new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
+							new_list->x = x[idx_datainput];
+							new_list->y = y[idx_datainput];
+							new_list->z = z[idx_datainput];
+
+							new_list->next=NULL;
+							cur->next = new_list;
 						}
-						new_list = (Info_Grid*)malloc(sizeof(Info_Grid));
-						new_list->x = x[idx_datainput];
-						new_list->y = y[idx_datainput];
-						new_list->z = z[idx_datainput];
-
-						new_list->next=NULL;
-						cur->next = new_list;
+					}else{
+						//there must be some bug if this happened --> ussually malloc failed
+						PRINTDEBUGMODE0("[ERROR] ANOTHER BUG\n");
+						PRINTDEBUGMODE0("X:%d; Y:%d\n",idx_x,idx_y);
+						PRINTDEBUGMODE0("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
 					}
-				}else{
-					//there must be some bug if this happened --> ussually malloc failed
-					PRINTDEBUGMODE0("[ERROR] ANOTHER BUG\n");
-					PRINTDEBUGMODE0("X:%d; Y:%d\n",idx_x,idx_y);
-					PRINTDEBUGMODE0("numberofGrids_X:%d; numberofGrids_Y:%d\n", numberofGrids_X, numberofGrids_Y);
 				}
+
 
 			}
 		}
@@ -334,9 +328,9 @@ int main(int argc, char *argv[]){
 	// Divide number of grids with the available process/workers
 	for(p=0;p< numGridPerNode;p++){
 		int idx_grid =p+rankId*numGridPerNode;
-		if(idx_grid<numberofGrids_X*numberofGrids_Y){
+		if(idx_grid<totalGrids){
 			int idx_x = idx_grid%numberofGrids_X;
-			int idx_y = (int) idx_grid/numberofGrids_Y;
+			int idx_y = (int) floor(idx_grid/numberofGrids_X);
 			int temp_idx_x = idx_x;
 			int temp_idx_y = idx_y;
 
@@ -357,7 +351,7 @@ int main(int argc, char *argv[]){
 				}
 
 			}else{
-				CalDistPointfromGrid(idx_x,idx_y, &points_counter);
+					CalDistPointfromGrid(idx_x,idx_y, &points_counter);
 			}
 
 			PRINTDEBUGMODE1("point_counter :%d\n",points_counter);
