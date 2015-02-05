@@ -136,39 +136,51 @@ __device__ double leastsquaredSumFunc (double *semivar, double* b0, double* h, i
 	return sum;
 }
 
-__global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_device, double *y_device, double *z_device, double minimumX, double minimumY, int numInputData)
+__global__ void on_core_process(double *dev_debugVar,int GPUIndexStart, double* ptr_xgridpoint, double* ptr_ygridpoint,double* ptrpredictionResult,
+		double *x_device, double *y_device, double *z_device, double minimumX, double minimumY, int numInputData, double gridsizes,
+		int GPUIndexEnd, int dimGridX_size)
 {
+	/**
+	  Algorithms:
+	  1) Specify anchor coordinates.
+	  2) We calculate distance from this point.
+	  3) This point will be different from each GPU thread
+	  4) Closest node are constant based on radius meters (not based on square of grid)
 
-	//Specify anchor coordinates.
-	//We calculate distance from this point.
-	//This point will be different from each GPU thread
-	//We assume that grid process is per 1 meter
+	 */
 
+	/**
+	 * GPU THREAD ID
+	 *  GRIDX_RANGE+GRIDY_RANGE                                ...
+	 *   .
+	 *   .
+	 *   .
+	 *  GRIDX_RANGE+1 GRIDX_RANGE+2                            ...      2*1000
+	 *   0             1              2              3         ...       1000
+	 */
+
+	int dimBlocksize = dimGridX_size;
 	int gridID = blockIdx.x+(blockIdx.y*gridDim.x);
 	//retrieve thread ID
 	int threadID = ((threadIdx.y)*blockDim.x+(threadIdx.x))+gridID*gridDim.x*gridDim.y;
-	threadID = threadID+500000*GPUIndex;
-	double y_node = (double) (1*floor((float)threadID/1000));
+	int dumpsize = threadID;
+	threadID = threadID+GPUIndexStart;
+
+	//we represent dimBlocksize as X axis length
+	//double y_node = (double) (1*floor((float)threadID/1000));
+	double y_node = (double) (1*floor((float)threadID/dimBlocksize));
+
 	//shift load jobs into several devices
-//	threadID = threadID + GPUIndex*500000; // 500000 is number of grid divide by number of devices
-	double x_node = (double) (threadID-1000*(floor((double)threadID/1000)));
-//	x_node = x_node+(double)(500*GPUIndex);
-
-
-	//debug version
-	//	double y_node = 1*floor((float)threadID/50);
-	//	double x_node = threadID-50*(floor((double)threadID/50));
+	double x_node = (double) (threadID%dimBlocksize);
 
 	//do each thread process here
-	int numberOfGrids = 1000*1000;
 	double weightsum;
 	int idx_onRange;
+	double predict=0;
 
-	if (threadID<numberOfGrids) {
-		//	if (x_node==(65-minimumX) && y_node==(137-minimumY)) {
-		//cuPrintf("Horee\n");
+	if ((threadID<GPUIndexEnd)&&(threadID>=GPUIndexStart)) {
 		//Calculate distance from each LIDAR input and save it into index if the distance still on the range
-		// in here we assume that we have only 1000 closest nodes
+		// in here we assume that we have only maximum 100 closest nodes
 		float x_closestNodesIndex[100];
 		float y_closestNodesIndex[100];
 		float z_closestNodesIndex[100];
@@ -181,14 +193,13 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 				x_closestNodesIndex[idx_onRange] = (float)x_device[i]; //change this with pointer to enhance performance
 				y_closestNodesIndex[idx_onRange] = (float)y_device[i]; //change this with pointer to enhance performance
 				z_closestNodesIndex[idx_onRange] = (float)z_device[i];
-				if(idx_onRange<100){ //TODO solve this function! why more tha
+				if(idx_onRange<100){ //TODO solve this function! why more than 100 is not allowed? stack problem?
 					idx_onRange++;
 				}
 			}
 		}
-		//cuPrintf("idx_onRange %d \n",idx_onRange);
-		//cuPrintf("numinput %d \n",numInputData);
-		//TODO find min & max value from closestNodesIndex variable (both X & Y)
+
+		//find min & max value from closestNodesIndex variable (both X & Y)
 		double min_x=999999;
 		double max_x=0;
 		double min_y=9999999;
@@ -217,12 +228,10 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 		float ptopDistance[100][100];
 		memset(ptopDistance,0,sizeof(ptopDistance));
 
-
 		float predist = sqrtf((float)(powf(max_x-min_x,2)+powf(max_y-min_y,2)));
 		float maxdist = predist/2;
 		float delta = maxdist/2;
 
-		//cuPrintf("masdist: %f \n",maxdist);
 		for(int i=0;i<rows;i++){
 			for(int j=i+1; j<rows;j++){
 				ptopDistance[i][j]= sqrt((float)(powf((float)(x_closestNodesIndex[i]-x_closestNodesIndex[j]),2.0)
@@ -232,10 +241,7 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 					int idx = (int) floorf(ptopDistance[i][j]/delta);
 					occIdxdistBins[idx] = occIdxdistBins[idx]+1;
 					double squrZ =powf(z_closestNodesIndex[i]-z_closestNodesIndex[j],2);
-					//cuPrintf("d[%d,%d]:%f\n",i,j,z_closestNodesIndex[i]);
-					//cuPrintf("squrZ:%f\n", squrZ);
 					sumSqurZ[idx]=sumSqurZ[idx]+squrZ;
-					//cuPrintf("ptopDistance[%d][%d]:%f\n",i,j,ptopDistance[i][j]);
 				}
 			}
 		}
@@ -246,20 +252,18 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 			}else{
 				sumSqurZ[i] = sumSqurZ[i]/(2*occIdxdistBins[i]);
 			}
-			//cuPrintf("sumSqurZ[%d] : %f \n",i,sumSqurZ[i]);
 		}
 
 		distance[0]=delta/2;
 		for(int i=0; i<nrbins;i++){
 			distance[i]=distance[i-1]+delta;
-			//			//cuPrintf("distance[%d]:%f\n",i,distance[i]);
 		}
 
-		/** SEmivariogram process is completed here*/
+		//SEmivariogram process is completed here
 
-		/**
-		 * Starting Fitting
-		 */
+
+		//Starting Fitting
+
 		double maxVario, minLs[3] = {DBL_MAX,0,0}, tmpLS[3]; // For fit
 		double lagbin, semibin;
 		double b0[3] = {0};
@@ -305,38 +309,16 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 		double sill = minLs[2];
 		//		range = 200;//Hard code
 		//		sill = 150;
-		//cuPrintf("range:%f\n",range);
-		//cuPrintf("sill:%f\n",sill);
 
-		/*
-		 * mulai dari sini yang belom FIX...huaaa...huaaa...
-		 *
-		 *
-		//prediction(struct Distnode *Head_distfromGrid,
-		                  int numofNearestPoint,
-		                  double range, double sill,
-		                  int numofPoints,  --> idx_onRange
-		                  int gridX, int gridY,
-		                  double coord_gridX, double coord_gridY,
-		                  double** distance) ptopDistance
-
-
-		 */
 		int N = idx_onRange+1; // we need one more column  & Row to fill 0 and 1 values (Ordinary Kriging)
-		double predict=0;
 
-		//TODO calculate distance achor node with
+		//TODO calculate distance anchor node with
 		int counter_idxClosestRange =0;
 		while (counter_idxClosestRange < idx_onRange){
 			ptopDistance[counter_idxClosestRange][N-1] = sqrt((float)(powf((float)(x_closestNodesIndex[counter_idxClosestRange]-(x_node+minimumX)),2.0)
 					+powf((float)(y_closestNodesIndex[counter_idxClosestRange]-(y_node+minimumY)),2.0)));
-			//cuPrintf("ptopDistance[%d][%d]:%f\n",counter_idxClosestRange,N-1,ptopDistance[counter_idxClosestRange][N-1]);
 			counter_idxClosestRange++;
 		}
-
-		//		for(int it=0;it<counter_idxClosestRange+1;it++){
-		//			//cuPrintf("ptopDistance: %2.2f \n",ptopDistance[it]);
-		//		}
 
 		double a[10201]; //101x101
 		double *a_ptr = a;
@@ -383,341 +365,36 @@ __global__ void on_core_process(int GPUIndex, double* ptrIsFinished, double *x_d
 		//TODO change this with more efficient way
 		for(i=0;i<N;i++){
 			for(j=0;j<N;j++){
-				//cuPrintf("rptr[%d][%d]:%f\n",i,j,rptr[i][j]);
 				*a_ptr = rptr[i][j];
 				a_ptr++;
 			}
 		}
 
-		//		for(i=0;i<N;i++){
-		//cuPrintf("b[%d]:%f\n",i,b[i]);
-		//		}
-
 		int err = Doolittle_LU_Decomposition_with_Pivoting(a, pivot,  N);
-		//cuPrintf("N=%d \n",N);
-		//cuPrintf("err: %d\n",err);
 		//printf ("after decom\n");
 		if (err < 0) {//cuPrintf("matrix is Singular\n");
 			//printf(" Matrix A is singular\n");
 		}
 		else {
 			err = Doolittle_LU_with_Pivoting_Solve(a, b, pivot, sol, N);
-
 		}
 
 		weightsum=0.0;
 		predict = 0.0;
 		//calculate predict value in grid or radius or nearest points
 		for (i=0 ; i<N-1 ; i++){
-			//cuPrintf("sol[%d]:%f\n",i,sol[i]);
 			predict += z_closestNodesIndex[i] * sol[i];
 			weightsum += sol[i];
 		}
 
-		//cuPrintf("ID[%d];weightsum: %f\n",threadID,weightsum);
-		//cuPrintf("ID[%d];predict %f\n",threadID,predict);
-		//		//cuPrintf("sill[%d]: %2.2f\n", threadID, sill);
-		//		//cuPrintf("range[%d]: %2.2f\n", threadID, range);
-
-
+		ptrpredictionResult[dumpsize]  = predict;
+		ptr_xgridpoint[dumpsize] = (x_node*gridsizes)+minimumX;
+		ptr_ygridpoint[dumpsize] = (y_node*gridsizes)+minimumY;
+		dev_debugVar[dumpsize]   = threadID;
 	}
-	int temp = threadID;
-	threadID = threadID-500000*GPUIndex;
-	//assign flag complete notification
-	ptrIsFinished[threadID]=temp;
+
 }
 
-// Kernel that executes on the CUDA device
-__global__ void on_core_process2(int GPUIndex, double* ptrIsFinished, double *x_device, double *y_device, double *z_device, double minimumX, double minimumY, int numInputData)
-{
-
-	//Specify anchor coordinates.
-	//We calculate distance from this point.
-	//This point will be different from each GPU thread
-	//We assume that grid process is per 1 meter
-
-	int gridID = blockIdx.x+(blockIdx.y*gridDim.x);
-	//retrieve thread ID
-	int threadID = ((threadIdx.y)*blockDim.x+(threadIdx.x))+gridID*gridDim.x*gridDim.y;
-	threadID = threadID+500000*GPUIndex;
-	double y_node = (double) (1*floor((float)threadID/1000));
-	//shift load jobs into several devices
-//	threadID = threadID + GPUIndex*500000; // 500000 is number of grid divide by number of devices
-	double x_node = (double) (threadID-1000*(floor((double)threadID/1000)));
-//	x_node = x_node+(double)(500*GPUIndex);
-
-
-	//debug version
-	//	double y_node = 1*floor((float)threadID/50);
-	//	double x_node = threadID-50*(floor((double)threadID/50));
-
-	//do each thread process here
-	int numberOfGrids = 1000*1000;
-	double weightsum;
-	int idx_onRange;
-
-	if (threadID<numberOfGrids) {
-		//	if (x_node==(65-minimumX) && y_node==(137-minimumY)) {
-		//cuPrintf("Horee\n");
-		//Calculate distance from each LIDAR input and save it into index if the distance still on the range
-		// in here we assume that we have only 1000 closest nodes
-		float x_closestNodesIndex[100];
-		float y_closestNodesIndex[100];
-		float z_closestNodesIndex[100];
-
-		int gridRadius = 3;
-		idx_onRange=0;
-		for(int i=0;i<numInputData;i++){ //TODO to big numInputData make this program crash
-			//save the value if distance is still on range
-			if(( abs((x_device[i]-(x_node+minimumX)))<gridRadius)&&(abs((y_device[i]-(y_node+minimumY)))<gridRadius)){
-				x_closestNodesIndex[idx_onRange] = (float)x_device[i]; //change this with pointer to enhance performance
-				y_closestNodesIndex[idx_onRange] = (float)y_device[i]; //change this with pointer to enhance performance
-				z_closestNodesIndex[idx_onRange] = (float)z_device[i];
-				if(idx_onRange<100){ //TODO solve this function! why more tha
-					idx_onRange++;
-				}
-			}
-		}
-		//cuPrintf("idx_onRange %d \n",idx_onRange);
-		//cuPrintf("numinput %d \n",numInputData);
-		//TODO find min & max value from closestNodesIndex variable (both X & Y)
-		double min_x=999999;
-		double max_x=0;
-		double min_y=9999999;
-		double max_y=0;
-		for(int i=0;i<idx_onRange;i++){
-			if(x_closestNodesIndex[i]<min_x)
-				min_x = x_closestNodesIndex[i];
-			if(y_closestNodesIndex[i]<min_y)
-				min_y = y_closestNodesIndex[i];
-			if(y_closestNodesIndex[i]>max_y)
-				max_y = y_closestNodesIndex[i];
-			if(x_closestNodesIndex[i]>max_x)
-				max_x = x_closestNodesIndex[i];
-			i++;
-		}
-
-		//Calculate Semivariogram
-		int nrbins = 50; //this is a parameter
-		int rows = idx_onRange;
-		double occIdxdistBins[50]; //parameter : nrbins
-		memset(occIdxdistBins,0,sizeof(occIdxdistBins));
-		double sumSqurZ[50]; //parameter : nrbins
-		memset(sumSqurZ,0,sizeof(sumSqurZ));
-		double distance[50]; //parameter : nrbins
-		memset(distance,0,sizeof(distance));
-		float ptopDistance[100][100];
-		memset(ptopDistance,0,sizeof(ptopDistance));
-
-
-		float predist = sqrtf((float)(powf(max_x-min_x,2)+powf(max_y-min_y,2)));
-		float maxdist = predist/2;
-		float delta = maxdist/2;
-
-		//cuPrintf("masdist: %f \n",maxdist);
-		for(int i=0;i<rows;i++){
-			for(int j=i+1; j<rows;j++){
-				ptopDistance[i][j]= sqrt((float)(powf((float)(x_closestNodesIndex[i]-x_closestNodesIndex[j]),2.0)
-						+powf((float)(y_closestNodesIndex[i]-y_closestNodesIndex[j]),2.0)));
-
-				if(ptopDistance[i][j]<maxdist){
-					int idx = (int) floorf(ptopDistance[i][j]/delta);
-					occIdxdistBins[idx] = occIdxdistBins[idx]+1;
-					double squrZ =powf(z_closestNodesIndex[i]-z_closestNodesIndex[j],2);
-					//cuPrintf("d[%d,%d]:%f\n",i,j,z_closestNodesIndex[i]);
-					//cuPrintf("squrZ:%f\n", squrZ);
-					sumSqurZ[idx]=sumSqurZ[idx]+squrZ;
-					//cuPrintf("ptopDistance[%d][%d]:%f\n",i,j,ptopDistance[i][j]);
-				}
-			}
-		}
-
-		for(int i=0;i<nrbins; i++){
-			if(occIdxdistBins[i] == 0.0){
-				sumSqurZ[i] = 0.0;
-			}else{
-				sumSqurZ[i] = sumSqurZ[i]/(2*occIdxdistBins[i]);
-			}
-			//cuPrintf("sumSqurZ[%d] : %f \n",i,sumSqurZ[i]);
-		}
-
-		distance[0]=delta/2;
-		for(int i=0; i<nrbins;i++){
-			distance[i]=distance[i-1]+delta;
-			//			//cuPrintf("distance[%d]:%f\n",i,distance[i]);
-		}
-
-		/** SEmivariogram process is completed here*/
-
-		/**
-		 * Starting Fitting
-		 */
-		double maxVario, minLs[3] = {DBL_MAX,0,0}, tmpLS[3]; // For fit
-		double lagbin, semibin;
-		double b0[3] = {0};
-
-		//find maximum variogram value
-		double max = 0.0;
-		for(int i=0;i<nrbins;i++){
-			if(sumSqurZ[i]>max)
-				max = sumSqurZ[i];
-		}
-		maxVario = max;
-
-		int bins = 10;
-		//b0[0] = range
-		//b0[1] = sill
-		b0[0] = distance[nrbins-1] * 2 /3;
-		b0[1] = maxVario;
-		lagbin = b0[0] / bins;
-		semibin = b0[1]/ bins;
-		int i,j;
-		for (i=0 ; i<bins ; i++){
-			for (j=0 ; j<bins ; j++){
-				b0[0] -= lagbin;
-				tmpLS[0] = leastsquaredSumFunc(sumSqurZ, b0, distance, nrbins);
-				tmpLS[1]= b0[0];
-				tmpLS[2]= b0[1];
-				if(minLs[0] > tmpLS[0]) {
-					minLs[0] = tmpLS[0];
-					minLs[1] = b0[0];
-					minLs[2] = b0[1];
-				}
-
-			}
-			b0 [0] = distance[nrbins-1] * 2 / 3;
-			b0 [1] -= semibin;
-		}
-
-		if (minLs[1] < 0.0001){
-			minLs[1] = distance[0];
-		}
-
-		double range = minLs[1];
-		double sill = minLs[2];
-		//		range = 200;//Hard code
-		//		sill = 150;
-		//cuPrintf("range:%f\n",range);
-		//cuPrintf("sill:%f\n",sill);
-
-		/*
-		 * mulai dari sini yang belom FIX...huaaa...huaaa...
-		 *
-		 *
-		//prediction(struct Distnode *Head_distfromGrid,
-		                  int numofNearestPoint,
-		                  double range, double sill,
-		                  int numofPoints,  --> idx_onRange
-		                  int gridX, int gridY,
-		                  double coord_gridX, double coord_gridY,
-		                  double** distance) ptopDistance
-
-
-		 */
-		int N = idx_onRange+1; // we need one more column  & Row to fill 0 and 1 values (Ordinary Kriging)
-		double predict=0;
-
-		//TODO calculate distance achor node with
-		int counter_idxClosestRange =0;
-		while (counter_idxClosestRange < idx_onRange){
-			ptopDistance[counter_idxClosestRange][N-1] = sqrt((float)(powf((float)(x_closestNodesIndex[counter_idxClosestRange]-(x_node+minimumX)),2.0)
-					+powf((float)(y_closestNodesIndex[counter_idxClosestRange]-(y_node+minimumY)),2.0)));
-			//cuPrintf("ptopDistance[%d][%d]:%f\n",counter_idxClosestRange,N-1,ptopDistance[counter_idxClosestRange][N-1]);
-			counter_idxClosestRange++;
-		}
-
-		//		for(int it=0;it<counter_idxClosestRange+1;it++){
-		//			//cuPrintf("ptopDistance: %2.2f \n",ptopDistance[it]);
-		//		}
-
-		double a[10201]; //101x101
-		double *a_ptr = a;
-		double rptr[101][101];//double **rptr;
-		//		a = (double*) rptr;
-
-		double b[101];
-		int pivot[101];
-		double sol[101];
-		memset(rptr,0,sizeof(rptr));
-		memset(b,0,sizeof(b));
-		memset(pivot,0,sizeof(pivot));
-		memset(sol,0,sizeof(sol));
-
-		//----------- Applied Gamma Function for Ordinary Kriging
-		for(i=0;i<N;i++){
-			for(j=i;j<N;j++){
-				if(j==N-1) {
-					rptr[i][j] = -1.0;
-					//cuPrintf("%f < %f kah?? \n",ptopDistance [i][j],range );
-					if (ptopDistance [i][j] < range){
-						b[i] = sphericalModel(range, sill, ptopDistance[i][j]);
-					}
-					else{
-						b[i] = sill;
-					}
-					//					//cuPrintf("b[%d]:%f\n",i,b[i]);
-				}else{
-					if (ptopDistance [i][j] < range){
-						rptr[i][j] = sphericalModel(range, sill, ptopDistance[i][j]);
-					}
-					else{
-						rptr[i][j] = sill;
-					}
-					//					//cuPrintf("rptr[%d]:%f\n",i,rptr[i]);
-					rptr[j][i] = rptr[i][j];
-					rptr[N-1][j]=1.0;
-				}
-			}
-		}
-		rptr[N-1][N-1] = 0.0;
-		b[N-1] = 1.0;
-
-		//TODO change this with more efficient way
-		for(i=0;i<N;i++){
-			for(j=0;j<N;j++){
-				//cuPrintf("rptr[%d][%d]:%f\n",i,j,rptr[i][j]);
-				*a_ptr = rptr[i][j];
-				a_ptr++;
-			}
-		}
-
-		//		for(i=0;i<N;i++){
-		//cuPrintf("b[%d]:%f\n",i,b[i]);
-		//		}
-
-		int err = Doolittle_LU_Decomposition_with_Pivoting(a, pivot,  N);
-		//cuPrintf("N=%d \n",N);
-		//cuPrintf("err: %d\n",err);
-		//printf ("after decom\n");
-		if (err < 0) {//cuPrintf("matrix is Singular\n");
-			//printf(" Matrix A is singular\n");
-		}
-		else {
-			err = Doolittle_LU_with_Pivoting_Solve(a, b, pivot, sol, N);
-
-		}
-
-		weightsum=0.0;
-		predict = 0.0;
-		//calculate predict value in grid or radius or nearest points
-		for (i=0 ; i<N-1 ; i++){
-			//cuPrintf("sol[%d]:%f\n",i,sol[i]);
-			predict += z_closestNodesIndex[i] * sol[i];
-			weightsum += sol[i];
-		}
-
-		//cuPrintf("ID[%d];weightsum: %f\n",threadID,weightsum);
-		//cuPrintf("ID[%d];predict %f\n",threadID,predict);
-		//		//cuPrintf("sill[%d]: %2.2f\n", threadID, sill);
-		//		//cuPrintf("range[%d]: %2.2f\n", threadID, range);
-
-
-	}
-	int temp = threadID;
-	threadID = threadID-500000*GPUIndex;
-	//assign flag complete notification
-	ptrIsFinished[threadID]=temp;
-}
 
 // main routine that executes on the host
 int main(void)
@@ -726,11 +403,10 @@ int main(void)
         and calculate range X & Y
 	 **/
 
-
 	clock_t start_time = clock();
 	int lineNumber=0;//1186845;
 	char* inputPathLIDARdata = "data/Data4_XYZ_Ground.txt";
-	//	char* inputPathLIDARdata = "data/DataSample.txt";
+	//char* inputPathLIDARdata = "data/DataSample.txt";
 
 	//Calculate number of line from input file
 	static const char* filename = inputPathLIDARdata;
@@ -747,13 +423,13 @@ int main(void)
 	else
 		perror ( filename );
 
-	printf("Line Number : %d\n", lineNumber);
+	printf("Number of Input Data: %d\n", lineNumber);
 
 	int N = lineNumber;
 	FILE *file=NULL;
 	int i=0;
 
-	printf("Starting Gridding ...\n");
+	//start Gridding Process
 	file=fopen(inputPathLIDARdata,"r");
 	if(file==NULL){
 		fprintf(stderr,"[gridding.cu] cannot open input LIDAR Data\n");
@@ -777,77 +453,187 @@ int main(void)
 	minX = floor(minX);
 	maxX = ceil(maxX);
 	maxY = ceil(maxY);
-	printf ("max Y %lf; min Y %lf \n" , maxY , minY);
-	printf ("max X %lf; min X %lf \n" , maxX , minX);
+	printf ("min X %lf; max X %lf\n" , minX, maxX );
+	printf ("min Y %lf; max Y %lf\n" , minY, maxY );
 	int gridXrange = (int) (maxX-minX );
 	int gridYrange = (int) (maxY-minY );
-	printf ("gridXrange %d (in meters) \n", gridXrange);
-	printf ("gridYrange %d (in meters) \n", gridYrange);
+	printf ("gridXrange original data %d (in meters) \n", gridXrange);
+	printf ("gridYrange original data %d (in meters) \n", gridYrange);
+
+	/**
+	 * Calculate grid size based on desired gridding size
+	 */
+
+	double gridsize = 1; // in meter
+	int numdevices = 2;  // set with 1 or 2 devices
+
+	//set CUDA thread dimension
+	int dimGridsize  = gridXrange/gridsize;
+	int dimBlocksize = gridYrange/gridsize;
+	int totalGrids = (dimBlocksize)*(dimGridsize);
+	int numthreads_pergpu = totalGrids/numdevices;
+
+	printf("Grid size                 : %2.2f m \n",gridsize);
+	printf("DimGridsize               : %d\n",dimGridsize);
+	printf("DimBlocksize              : %d\n",dimBlocksize);
+	printf("Number of TOTAL GPU Grid  : %d threads\n",totalGrids);
+
+	dim3 dimGrid(1024,1);
+	dim3 dimBlock(1024,1);
 
 	//Define variable for all CUDA devices
-	double *x_devices, *x_devices2;
-	double *y_devices, *y_devices2;
-	double *z_devices, *z_devices2;
-	double *isFinished, *isFinished2;
-	double isFinished_host[500000];
-	double isFinished_host2[500000];
-	int device;
-	double *ptrFinish, *ptrFinish2;
-	ptrFinish = isFinished_host;
-	ptrFinish2 = isFinished_host2;
-	dim3 dimGrid(50,10);
-	dim3 dimBlock(500,2);
+	double *dev_debugVar, *dev_debugVar2; //for debugger purpose
+	double *dev_x, *dev_x2, *dev_y, *dev_y2, *dev_z, *dev_z2; //x,y,z store in devices
+	double *predictionResult, *predictionResult2; //store prediction result here
+	//pointer to result storage in host
+	double *host_predictionResult  = (double*) malloc(sizeof(double)*1024*1020);
+	double *host_predictionResult2 = (double*) malloc(sizeof(double)*1024*1020);
+	memset(host_predictionResult, -1,sizeof(double)*1024*1020);
+	memset(host_predictionResult2,-1,sizeof(double)*1024*1020);
+	double *dev_y_gridpoint, *dev_x_gridpoint,*dev_y_gridpoint2, *dev_x_gridpoint2;//saving corresponding x,y point in devices
+	//saving x,y correponding point in host
+	double *x_gridpoint  = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 1
+	double *y_gridpoint  = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 1
+	double *x_gridpoint2 = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 2
+	double *y_gridpoint2 = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 2
+	//create debugger storage
+	double *host_debugVar  = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 1
+	double *host_debugVar2 = (double*) malloc(sizeof(double)*numthreads_pergpu);//device 2
+	memset(host_debugVar, -1,sizeof(double)*numthreads_pergpu);
+	memset(host_debugVar2,-1,sizeof(double)*numthreads_pergpu);
+	int device; //device ID
 
-	//Start CUDA Programming device 0
-	cudaSetDevice(0);
-//	cudaPrintfInit();
-	cudaGetDevice(&device);
-	cudaThreadSetLimit(cudaLimitMallocHeapSize,1024*1024*1024);
-	printf("dev: %d\n",device);
+	int loop=0;
+	while(numthreads_pergpu>(1020*1020)){
+		numthreads_pergpu = numthreads_pergpu/2;
+		loop++;
+	}
+	printf("numthreads per gpu devices: %d threads/devices\n\n",numthreads_pergpu);
+	clock_t preprocessing_time;
+	clock_t finished_time;
 
-	cudaMalloc((void**)&x_devices,sizeof(double)*(N));
-	cudaMalloc((void**)&y_devices,sizeof(double)*(N));
-	cudaMalloc((void**)&z_devices,sizeof(double)*(N));
-	cudaMalloc((void**)&isFinished, sizeof(double)*500000);
-	cudaMemset(isFinished,-1,sizeof(double)*500000);
+	preprocessing_time = clock();
+	int p;
 
-	//	dim3 dimGrid(32,32);
-	//	dim3 dimBlock(32,32);
+	printf("Running Kernel threads...\n");
+	for(p=0;p<=loop;p++){
+		cudaSetDevice(0);
+		//cudaDeviceReset();
+		cudaGetDevice(&device);
+		cudaThreadSetLimit(cudaLimitMallocHeapSize,1024*1024*1024);
 
-	cudaMemcpy(x_devices, x, sizeof(double)*(N), cudaMemcpyHostToDevice);
-	cudaMemcpy(y_devices, y, sizeof(double)*(N), cudaMemcpyHostToDevice);
-	cudaMemcpy(z_devices, z, sizeof(double)*(N), cudaMemcpyHostToDevice);
+		cudaMalloc((void**)&dev_x,sizeof(double)*(N));
+		cudaMalloc((void**)&dev_y,sizeof(double)*(N));
+		cudaMalloc((void**)&dev_z,sizeof(double)*(N));
+		cudaMalloc((void**)&predictionResult, sizeof(double)*numthreads_pergpu);
+		cudaMalloc((void**)&dev_x_gridpoint, sizeof(double)*numthreads_pergpu);
+		cudaMalloc((void**)&dev_y_gridpoint, sizeof(double)*numthreads_pergpu);
+		cudaMalloc((void**)&dev_debugVar, sizeof(double)*numthreads_pergpu);
+		cudaMemset((void*)predictionResult,-1,sizeof(double)*numthreads_pergpu);
 
-	clock_t preprocessing_time = clock();
+		cudaMemcpy(dev_x, x, sizeof(double)*(N), cudaMemcpyHostToDevice);
+		cudaMemcpy(dev_y, y, sizeof(double)*(N), cudaMemcpyHostToDevice);
+		cudaMemcpy(dev_z, z, sizeof(double)*(N), cudaMemcpyHostToDevice);
 
-	on_core_process<<< dimGrid, dimBlock>>>(0,isFinished, x_devices, y_devices, z_devices,minX,minY, N);
-	cudaMemcpy(ptrFinish,isFinished,sizeof(double)*500000,cudaMemcpyDeviceToHost);
-	printf("CUDA err: %s \n", cudaGetErrorString(cudaGetLastError()));
+		//limit threads per device
 
-	//Start CUDA Programming device 1
-	cudaSetDevice(1);
-	cudaGetDevice(&device);
-	cudaThreadSetLimit(cudaLimitMallocHeapSize,1024*1024*1024);
-	printf("dev: %d\n",device);
 
-	cudaMalloc((void**)&x_devices2,sizeof(double)*(N));
-	cudaMalloc((void**)&y_devices2,sizeof(double)*(N));
-	cudaMalloc((void**)&z_devices2,sizeof(double)*(N));
-	cudaMalloc((void**)&isFinished2, sizeof(double)*500000);
-	cudaMemset(isFinished2,-1,sizeof(double)*500000);
+		on_core_process<<< dimGrid, dimBlock>>>(dev_debugVar,p*numthreads_pergpu,dev_x_gridpoint,dev_y_gridpoint,predictionResult, dev_x, dev_y, dev_z,
+				minX,minY, N,gridsize, (p+1)*numthreads_pergpu,dimGridsize);
 
-	cudaMemcpy(x_devices2, x, sizeof(double)*(N), cudaMemcpyHostToDevice);
-	cudaMemcpy(y_devices2, y, sizeof(double)*(N), cudaMemcpyHostToDevice);
-	cudaMemcpy(z_devices2, z, sizeof(double)*(N), cudaMemcpyHostToDevice);
 
-	on_core_process<<< dimGrid, dimBlock>>>(1,isFinished2, x_devices2, y_devices2, z_devices2,minX,minY, N);
+		printf("[Device %d] CUDA err: %s \n", device,cudaGetErrorString(cudaGetLastError()));
 
-	clock_t finished_time = clock();
+		//If we need second devices, then start CUDA Programming device 1
+		if(numdevices==2){
+			cudaSetDevice(1);
+			//cudaDeviceReset();
+			cudaGetDevice(&device);
+			cudaThreadSetLimit(cudaLimitMallocHeapSize,1024*1024);
 
-	//	cudaThreadSynchronize();
-	cudaMemcpy(ptrFinish2,isFinished2,sizeof(double)*500000,cudaMemcpyDeviceToHost);
+			cudaMalloc((void**)&dev_x2,sizeof(double)*(N));
+			cudaMalloc((void**)&dev_y2,sizeof(double)*(N));
+			cudaMalloc((void**)&dev_z2,sizeof(double)*(N));
+			cudaMalloc((void**)&predictionResult2, sizeof(double)*numthreads_pergpu);
+			cudaMalloc((void**)&dev_x_gridpoint2, sizeof(double)*numthreads_pergpu);
+			cudaMalloc((void**)&dev_y_gridpoint2, sizeof(double)*numthreads_pergpu);
+			cudaMalloc((void**)&dev_debugVar2, sizeof(double)*numthreads_pergpu);
+			cudaMemset((void*)predictionResult2,-1,sizeof(double)*numthreads_pergpu);
 
-//	printf("CUDA Synch err: %s \n", cudaGetErrorString(cudaDeviceSynchronize()));
+			cudaMemcpy(dev_x2, x, sizeof(double)*(N), cudaMemcpyHostToDevice);
+			cudaMemcpy(dev_y2, y, sizeof(double)*(N), cudaMemcpyHostToDevice);
+			cudaMemcpy(dev_z2, z, sizeof(double)*(N), cudaMemcpyHostToDevice);
+
+			on_core_process<<< dimGrid, dimBlock>>>(dev_debugVar2,(int)((p+1)*numthreads_pergpu),dev_x_gridpoint2,dev_y_gridpoint2,predictionResult2, dev_x2, dev_y2, dev_z2,
+					minX,minY, N,gridsize, (p+2)*numthreads_pergpu, dimGridsize);
+
+			printf("[Device %d] CUDA err: %s \n", device,cudaGetErrorString(cudaGetLastError()));
+		}
+		//cudaThreadSynchronize();
+		//cudaDeviceSynchronize();
+
+		cudaMemcpy(host_predictionResult,predictionResult,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+		cudaMemcpy(x_gridpoint,dev_x_gridpoint,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+		cudaMemcpy(y_gridpoint,dev_y_gridpoint,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+		cudaMemcpy(host_debugVar,dev_debugVar,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+
+
+		if(numdevices==2){
+			cudaMemcpy(host_predictionResult2,predictionResult2,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+			cudaMemcpy(x_gridpoint2,dev_x_gridpoint2,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+			cudaMemcpy(y_gridpoint2,dev_y_gridpoint2,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+			cudaMemcpy(host_debugVar2,dev_debugVar2,sizeof(double)*numthreads_pergpu,cudaMemcpyDeviceToHost);
+		}
+
+		//lets Write output value to file
+		FILE *fout;
+
+		/* open the file */
+		fout = fopen("output/prediction_result.txt", "a");
+		if (fout == NULL) {
+			printf("I couldn't open output/prediction_result.txt for writing.\n");
+			exit(0);
+		}
+
+		/* write to the file */
+		printf("Writting to file ... \n");
+
+		for (i=0; i< numthreads_pergpu; i++){
+			fprintf(fout, "%2.2f  ", *(x_gridpoint+i));
+			fprintf(fout, "%2.2f  ", *(y_gridpoint+i));
+			fprintf(fout, "%2.2f\n", *(host_predictionResult+i));
+			if(numdevices==2){
+				fprintf(fout, "%2.2f  ", *(x_gridpoint2+i));
+				fprintf(fout, "%2.2f  ", *(y_gridpoint2+i));
+				fprintf(fout, "%2.2f\n", *(host_predictionResult2+i));
+			}
+		}
+		/* close the file */
+		fclose(fout);
+
+		/* create debug file */
+		fout = fopen("output/debug.txt", "a");
+		if (fout == NULL) {
+			printf("I couldn't open output/prediction_result.txt for writing.\n");
+			exit(0);
+		}
+
+		/* write to the file */
+		printf("Writting DEBUG file ... \n");
+		fprintf(fout,"threadID written as below (one line one GPU thread): \n");
+		for (i=0; i< numthreads_pergpu; i++){
+			fprintf(fout, "%2.2f\n", *(host_debugVar+i));
+			if(numdevices==2){
+				fprintf(fout, "%2.2f\n", *(host_debugVar2+i));
+			}
+		}
+		/* close the file */
+		fclose(fout);
+		printf("Finished wrote in loop %d\n",p);
+	}
+
+	finished_time = clock();
+	//	printf("CUDA Synch err: %s \n", cudaGetErrorString(cudaDeviceSynchronize()));
 	printf("CUDA last err: %s \n", cudaGetErrorString(cudaGetLastError()));
 
 	clock_t postprocessing_time = clock();
@@ -856,52 +642,22 @@ int main(void)
 	double time_kernelProcessing 	= ((double)(finished_time-preprocessing_time))/CLOCKS_PER_SEC;
 	double time_postprocessing	    = ((double)(postprocessing_time-finished_time))/CLOCKS_PER_SEC;
 
-	int counter_done = 0;
-	int counter_unexecuted = 0;
-	for(int b=0;b<500000;b++){
-		if((b<20))
-			printf("cek (1) [%d]:%2.2f\n",b,isFinished_host[b]);
-		if(isFinished_host[b]==b){
-			counter_done++;
-		}else{
-			counter_unexecuted++;
-		}
-	}
-
-	int counter_done2 = 0;
-	int counter_unexecuted2 = 0;
-	for(int b=0;b<500000;b++){
-		if((b<20))
-			printf("cek (2)[%d]:%2.2f\n",b,isFinished_host2[b]);
-		if(isFinished_host2[b]==b){
-			counter_done2++;
-		}else{
-			counter_unexecuted2++;
-		}
-	}
-
-
-	printf("counter_done : %d (%2.2f)\% \n",counter_done,(double) counter_done/(counter_done+counter_unexecuted)*100);
-
-	printf("total Preprocessing time %2.2f \n",time_preprocessing);
+	printf("\ntotal Preprocessing time %2.2f \n",time_preprocessing);
 	printf("total Kernel time %2.2f \n",time_kernelProcessing);
 	printf("total Postprocessing time %2.2f \n",time_postprocessing);
-
-//	cudaPrintfDisplay();
-//	cudaPrintfEnd();
 
 	//de-allocate memory both in host and devices
 	free(x);
 	free(y);
 	free(z);
-	cudaFree(x_devices);
-	cudaFree(y_devices);
-	cudaFree(z_devices);
-	cudaFree(x_devices2);
-	cudaFree(y_devices2);
-	cudaFree(z_devices2);
-	cudaFree(isFinished);
-	cudaFree(isFinished2);
+	cudaFree(dev_x);
+	cudaFree(dev_y);
+	cudaFree(dev_z);
+	cudaFree(dev_x2);
+	cudaFree(dev_y2);
+	cudaFree(dev_z2);
+	cudaFree(predictionResult);
+	cudaFree(predictionResult2);
 }
 
 void findMinMax (double x, double y){
