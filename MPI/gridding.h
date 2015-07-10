@@ -15,7 +15,7 @@ typedef struct Info_Grid{
 
 typedef struct Pointer_Grid{
 	struct Info_Grid *next;
-} Pointer;
+} PointerOfGrid;
 
 typedef struct Dist_Node {
 	double distance;
