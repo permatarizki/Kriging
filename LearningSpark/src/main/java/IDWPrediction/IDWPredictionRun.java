@@ -91,16 +91,18 @@ public class IDWPredictionRun {
         System.out.println("number of closest points:"+closestpointsofgrid.count());
         closestpointsofgrid.saveAsTextFile("output");
 
-        JavaPairRDD<String, String> prediction = closestpointsofgrid.reduceByKey(
-                new Function2<Double, Double, String>() {
-                    public String call(Double aDouble, Double aDouble2) throws Exception {
-                        //concatenate all values in one same key
-                        String out = aDouble.toString()+","+aDouble2.toString();
-                        return out;
+        JavaPairRDD<String, Double> prediction = closestpointsofgrid.reduceByKey(
+                new Function2<Double, Double, Double>() {
+                    public Double call(Double aDouble, Double aDouble2) throws Exception {
+                        //calculate weight by applying IDW formula
+
+                        double weight = aDouble+aDouble2;
+                        return weight;
                     }
                 }
         );
         prediction.collect();
+        prediction.saveAsTextFile("prediction");
 
     }
 }
