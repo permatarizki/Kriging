@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class IDWPredictionRun {
     public static void main(String args[]){
-        System.out.println("Starting Kriging Application");
+        System.out.println("Starting IDW Prediction");
 
         //Create a Java Spark Context
         SparkConf conf = new SparkConf().setMaster("local").setAppName("IDW Prediction spark");
