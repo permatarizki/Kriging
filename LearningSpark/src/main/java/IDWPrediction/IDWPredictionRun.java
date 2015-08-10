@@ -25,11 +25,11 @@ public class IDWPredictionRun {
         JavaSparkContext sc = new JavaSparkContext(conf);
 
         //Specify Grid Dimension
-        int x_length_grid = 70; //in meters
-        int y_length_grid = 70; //in meters
+        int x_length_grid = 2; //in meters
+        int y_length_grid = 2; //in meters
         final double grid_size = 1; //in meters
         //specify radius range to search nearest points
-        final double radiusrange = 3; //in meters
+        final double radiusrange = 500; //in meters
 
         //create RDD based on this grid points
         List<String> gridpoints = new ArrayList<String>();
@@ -87,24 +87,20 @@ public class IDWPredictionRun {
                     }
                 }
         );
-        closestpointsofgrid.collect();
+        //closestpointsofgrid.collect();
         System.out.println("number of closest points:"+closestpointsofgrid.count());
         closestpointsofgrid.saveAsTextFile("output");
 
-        //Prediction calculation for each grids
-        //TODO change this part with more efficient RDD transformation
-        JavaRDD<String> grid_with_closestpoints = sc.textFile("output/part-00000");
-        JavaRDD<String> predictions = grid_with_closestpoints.map(
-                new Function<String,String>() {
-                    public String call(String s) throws Exception {
-                        //Parsing each line
-
-                        return s;
+        JavaPairRDD<String, String> prediction = closestpointsofgrid.reduceByKey(
+                new Function2<Double, Double, String>() {
+                    public String call(Double aDouble, Double aDouble2) throws Exception {
+                        //concatenate all values in one same key
+                        String out = aDouble.toString()+","+aDouble2.toString();
+                        return out;
                     }
                 }
         );
+        prediction.collect();
 
-        predictions.collect();
-        predictions.saveAsTextFile("prediction_result");
     }
 }
