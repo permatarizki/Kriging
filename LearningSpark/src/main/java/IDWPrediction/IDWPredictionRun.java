@@ -21,7 +21,7 @@ public class IDWPredictionRun {
         System.out.println("Starting Kriging Application");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setMaster("local").setAppName("Intellij WordCount spark");
+        SparkConf conf = new SparkConf().setMaster("local").setAppName("IDW Prediction spark");
         JavaSparkContext sc = new JavaSparkContext(conf);
 
         //Specify Grid Dimension
