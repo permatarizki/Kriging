@@ -16,6 +16,7 @@ import java.util.List;
 
 /**
  * Created by mata on 7/8/15.
+ * email : permatarizki.at.gmail.com
  */
 public class IDWPredictionRun {
     public static void main(String args[]){
@@ -89,8 +90,8 @@ public class IDWPredictionRun {
                 }
         );
         //gridWithOnePoint.collect();      aDouble
-        System.out.println("number of closest points:"+gridWithOnePoint.count());
-        gridWithOnePoint.saveAsTextFile("gridWithOnePoint");
+        //System.out.println("number of closest points:"+gridWithOnePoint.count());
+        //gridWithOnePoint.saveAsTextFile("gridWithOnePoint");
 
         JavaPairRDD<String, String> gridWithPoints = gridWithOnePoint.reduceByKey(
                 new Function2<String, String, String>() {
@@ -100,8 +101,8 @@ public class IDWPredictionRun {
                     }
                 }
         );
-        gridWithPoints.collect();
-        gridWithPoints.saveAsTextFile("gridWithPoints");
+        //gridWithPoints.collect();
+        //gridWithPoints.saveAsTextFile("gridWithPoints");
 
         JavaRDD<String> gridWithPrediction = gridWithPoints.map(
                 new Function<Tuple2<String, String>, String>() {
