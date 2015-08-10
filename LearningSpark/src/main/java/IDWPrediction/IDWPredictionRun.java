@@ -92,14 +92,6 @@ public class IDWPredictionRun {
         closestpointsofgrid.saveAsTextFile("output");
 
         //Prediction calculation for each grids
-        JavaRDD<String> prediction = (JavaRDD<String>)closestpointsofgrid.reduceByKey(
-                new Function2<Double, Double, String>() {
-                    public String call(Double aDouble, Double aDouble2) throws Exception {
-                        return "ok";
-                    }
-                }
-        );
-
         //TODO change this part with more efficient RDD transformation
         JavaRDD<String> grid_with_closestpoints = sc.textFile("output/part-00000");
         JavaRDD<String> predictions = grid_with_closestpoints.map(
