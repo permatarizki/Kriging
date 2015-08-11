@@ -27,33 +27,33 @@ public class IDWPredictionRun {
         JavaSparkContext sc = new JavaSparkContext(conf);
 
         //Specify Grid Dimension
-        int x_length_grid = 2; //in meters
-        int y_length_grid = 2; //in meters
+        int x_length_grid = 1000; //in meters
+        int y_length_grid = 1000; //in meters
         final double grid_size = 1; //in meters
         //specify radius range to search nearest points
-        final double radiusrange = 500; //in meters
+        final double radiusrange = 3; //in meters
 
-        //create RDD based on this grid points
+        //create RDD based on this grid point
         List<String> gridpoints = new ArrayList<String>();
         int x,y;
-        for(x=0; x<x_length_grid; x++){
-            for (y=0; y<y_length_grid; y++){
+        int minx = 561000;
+        int miny = 4198000;
+        for(x=minx; x<x_length_grid+minx; x++){
+            for (y=miny; y<y_length_grid+miny; y++){
                 gridpoints.add(x+","+y);
             }
         }
-        //check size of grids
+        //check size of gridsu
         System.out.println(gridpoints.size());
         //create RDD for each grid points
         JavaRDD<String> rdd_gridpoints = sc.parallelize(gridpoints);
 
         //Now we load LiDAR data input from a file and create RDD for it
-        final JavaRDD<String> rdd_inputLIDAR = sc.textFile("input/DataSample.txt");
+        final JavaRDD<String> rdd_inputLIDAR = sc.textFile("input/Data2_XYZ.txt");
         final int length_inputLIDAR = (int) rdd_inputLIDAR.count();
         System.out.println(length_inputLIDAR);
         final List<String> inputLIDAR = rdd_inputLIDAR.collect();
-//        System.out.println(inputLIDAR.get(3));
 
-        //
         JavaPairRDD<String,String> gridWithOnePoint = rdd_gridpoints.flatMapToPair(
                 new PairFlatMapFunction<String, String, String>() {
                     public Iterable<Tuple2<String, String>> call(String s) throws Exception {
@@ -89,55 +89,55 @@ public class IDWPredictionRun {
                     }
                 }
         );
-        //gridWithOnePoint.collect();      aDouble
-        //System.out.println("number of closest points:"+gridWithOnePoint.count());
         //gridWithOnePoint.saveAsTextFile("gridWithOnePoint");
 
         JavaPairRDD<String, String> gridWithPoints = gridWithOnePoint.reduceByKey(
                 new Function2<String, String, String>() {
                     public String call(String s1, String s2) throws Exception {
-                        //accumulate all index of closest points
+                        //accumulate all index of closest points from one grid point
                         return s1 +","+ s2;
                     }
                 }
         );
-        //gridWithPoints.collect();
         //gridWithPoints.saveAsTextFile("gridWithPoints");
 
         JavaRDD<String> gridWithPrediction = gridWithPoints.map(
                 new Function<Tuple2<String, String>, String>() {
                     public String call(Tuple2<String, String> gridwithpointsTuple) throws Exception {
-                        //Parse elements both from grid and closest point
-                        String[] elementsGrid= gridwithpointsTuple._1().split(",");
-                        double x_grid = Double.parseDouble(elementsGrid[0]);
-                        double y_grid = Double.parseDouble(elementsGrid[1]);
-                        String[] elementsIndex = gridwithpointsTuple._2().split(",");
-                        double numerator = 0;
-                        double denominator = 0;
-                        for(int i=0; i<elementsIndex.length; i++){
-                            //get x,y,z Lidar based on index
-                            String[] elementsPoint = inputLIDAR.get(i).split(" ");
-                            double x_point = Double.parseDouble(elementsPoint[0]);
-                            double y_point = Double.parseDouble(elementsPoint[1]);
-                            double z_point = Double.parseDouble(elementsPoint[2]);
-                            //calculate euclidian distance
-                            double deltaX = x_grid - x_point;
-                            double deltaY = y_grid - y_point;
-                            double distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                        if (gridwithpointsTuple._2().contentEquals("no_points")) {
+                            return gridwithpointsTuple._1() + ",0";
+                        } else {
+                            //Parse elements both from grid and closest point
+                            String[] elementsGrid = gridwithpointsTuple._1().split(",");
+                            double x_grid = Double.parseDouble(elementsGrid[0]);
+                            double y_grid = Double.parseDouble(elementsGrid[1]);
+                            String[] elementsIndex = gridwithpointsTuple._2().split(",");
+                            double numerator = 0;
+                            double denominator = 0;
+                            for (int i = 0; i < elementsIndex.length; i++) {
+                                //get x,y,z Lidar based on index
+                                String[] elementsPoint = inputLIDAR.get(i).split(" ");
+                                double x_point = Double.parseDouble(elementsPoint[0]);
+                                double y_point = Double.parseDouble(elementsPoint[1]);
+                                double z_point = Double.parseDouble(elementsPoint[2]);
+                                //calculate euclidian distance
+                                double deltaX = x_grid - x_point;
+                                double deltaY = y_grid - y_point;
+                                double distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-                            numerator = numerator + z_point/distance;
-                            denominator  = denominator + 1/distance;
+                                numerator = numerator + z_point / distance;
+                                denominator = denominator + 1 / distance;
 
+                            }
+
+                            double weight = numerator / denominator;
+                            DecimalFormat df = new DecimalFormat("#.##");
+                            String dx = df.format(weight);
+                            return gridwithpointsTuple._1() + "," + dx;
                         }
-
-                        double weight = numerator/denominator;
-                        DecimalFormat df = new DecimalFormat("#.##");
-                        String dx = df.format(weight);
-                        return gridwithpointsTuple._1()+","+dx;
                     }
                 }
         );
-        gridWithPrediction.collect();
         gridWithPrediction.saveAsTextFile("gridWithPrediction");
 
     }
