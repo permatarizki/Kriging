@@ -60,7 +60,7 @@
                             </excludes>
                         </filter>
                     </filters>
-                    <finalName>uber-${project.artifactId}-${project.version}</finalName>
+                    <finalName>idw-${project.artifactId}-${project.version}</finalName>
                 </configuration>
             </plugin>
         </plugins>

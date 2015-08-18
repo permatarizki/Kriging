@@ -12,6 +12,7 @@ import scala.Tuple2;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -19,49 +20,75 @@ import java.util.logging.Logger;
  * email : permatarizki.at.gmail.com
  */
 public class IDWPredictionRun {
+    private static Logger logger = Logger.getLogger(IDWPredictionRun.class.getName());
+
     public static void main(String args[]){
         if(args.length != 2){
             System.err.println("Usage: IDWPrediction <pathtoLidarData> <radiusrange>");
             System.exit(1);
         }
 
-        Logger logger = Logger.getLogger(IDWPredictionRun.class.getName());
         logger.info("Starting IDW Prediction");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setMaster("local[16]").setAppName("IDW Prediction spark");
+        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
         JavaSparkContext sc = new JavaSparkContext(conf);
+        sc.startTime();
 
-
-        //Specify Grid Dimension
-        int x_length_grid = 1000; //in meters
-        int y_length_grid = 1000; //in meters
-        final double grid_size = 1; //in meters
         //specify radius range to search nearest points
         final double radiusrange = Double.parseDouble(args[1]); //in meters
-
-        //create RDD based on this grid point
-        List<String> gridpoints = new ArrayList<String>();
-        int x,y;
-        int minx = 561000;
-        int miny = 4198000;
-        for(x=minx; x<x_length_grid+minx; x++){
-            for (y=miny; y<y_length_grid+miny; y++){
-                gridpoints.add(x+","+y);
-            }
-        }
-        //check size of gridsu
-        logger.info("Number of GRID points : " + String.valueOf(gridpoints.size()));
-        //create RDD for each grid points
-        JavaRDD<String> rdd_gridpoints = sc.parallelize(gridpoints);
 
         //Now we load LiDAR data input from a file and create RDD for it
         final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0]);
         final int length_inputLIDAR = (int) rdd_inputLIDAR.count();
         logger.info("Number of LiDAR input points : " + String.valueOf(length_inputLIDAR));
         final List<String> inputLIDAR = rdd_inputLIDAR.collect();
+        double minX = 9999999;
+        double maxX = 0;
+        double minY = 9999999;
+        double maxY = 0;
+        for(int i=0; i<inputLIDAR.size(); i++){
+            String delims = " ";
+            String[] elements= inputLIDAR.get(i).split(delims);
+            double x = Double.parseDouble(elements[0]);
+            double y = Double.parseDouble(elements[1]);
 
-        JavaPairRDD<String,String> gridWithOnePoint = rdd_gridpoints.flatMapToPair(
+            if(x < minX)
+                minX = x;
+            if(x > maxX)
+                maxX = x;
+            if(y < minY)
+                minY = y;
+            if(y > maxY)
+                maxY = y;
+        }
+
+        logger.info("MIN: ("+minX+","+minY+")");
+        logger.info("MAX: ("+maxX+","+maxY+")");
+
+        //create RDD based on this grid point
+        List<String> gridpoints = new ArrayList<String>();
+        int x,y;
+        int minx = (int) Math.floor(minX);
+        int miny = (int) Math.floor(minY);
+        //Specify Grid Dimension
+        int x_length_grid = 1000; //in meters
+        int y_length_grid = 1000; //in meters
+        final double grid_size = 1; //in meters
+
+        for(x=minx; x<x_length_grid+minx; x++){
+            for (y=miny; y<y_length_grid+miny; y++){
+                gridpoints.add(x+","+y);
+            }
+        }
+        //check size of gridsu
+        logger.log(Level.INFO,"Number of GRID points : " + String.valueOf(gridpoints.size()));
+        //create RDD for each grid points
+        JavaRDD<String> rdd_gridpoints = sc.parallelize(gridpoints);
+        rdd_gridpoints.saveAsTextFile("gridPoints");
+
+        final JavaRDD<String> rdd_gridfromtext = sc.textFile("gridPoints/part-*");
+        JavaPairRDD<String,String> gridWithOnePoint = rdd_gridfromtext.flatMapToPair(
                 new PairFlatMapFunction<String, String, String>() {
                     public Iterable<Tuple2<String, String>> call(String s) throws Exception {
                         //Parsing raw data to its coordinates & weight
@@ -148,5 +175,8 @@ public class IDWPredictionRun {
         gridWithPrediction.collect();
         gridWithPrediction.saveAsTextFile("gridWithPrediction");
 
+        sc.stop();
+
+        logger.info("FINISHED IDW PREDICTION");
     }
 }
