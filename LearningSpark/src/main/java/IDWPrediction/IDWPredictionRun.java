@@ -31,7 +31,7 @@ public class IDWPredictionRun {
         logger.info("Starting IDW Prediction");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setMaster("local").setAppName("IDW Prediction spark");
+        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.startTime();
 
@@ -43,6 +43,8 @@ public class IDWPredictionRun {
         final int length_inputLIDAR = (int) rdd_inputLIDAR.count();
         logger.info("Number of LiDAR input points : " + String.valueOf(length_inputLIDAR));
         final List<String> inputLIDAR = rdd_inputLIDAR.collect();
+        rdd_inputLIDAR.unpersist();
+
         double minX = 9999999;
         double maxX = 0;
         double minY = 9999999;
@@ -90,6 +92,7 @@ public class IDWPredictionRun {
         //create RDD for each grid points
         JavaRDD<String> rdd_gridpoints = sc.parallelize(gridpoints);
         rdd_gridpoints.saveAsTextFile("gridPoints");
+        rdd_gridpoints.unpersist();
 
         final JavaRDD<String> rdd_gridfromtext = sc.textFile("gridPoints/part-*");
         JavaPairRDD<String,String> gridWithOnePoint = rdd_gridfromtext.flatMapToPair(
@@ -115,7 +118,7 @@ public class IDWPredictionRun {
                             //filter based on radius range
                             if (distance < radiusrange) {
                                 //<key,value> = <gridxy, indexLidar>
-                                grid_with_closestPoints.add(new Tuple2<String, String>(s,Integer.toString(i)));
+                                grid_with_closestPoints.add(new Tuple2<String, String>(s, Integer.toString(i)));
                             }
                         }
                         //Exception for any grid which don't have any closest points
@@ -133,12 +136,13 @@ public class IDWPredictionRun {
                 new Function2<String, String, String>() {
                     public String call(String s1, String s2) throws Exception {
                         //accumulate all index of closest points from one grid point
-                        return s1 +","+ s2;
+                        return s1 + "," + s2;
                     }
                 }
         );
         gridWithPoints.collect();
-        gridWithPoints.saveAsTextFile("gridWithPoints");
+//        gridWithPoints.saveAsTextFile("gridWithPoints");
+        gridWithOnePoint.unpersist();
 
         JavaRDD<String> gridWithPrediction = gridWithPoints.map(
                 new Function<Tuple2<String, String>, String>() {
