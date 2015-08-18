@@ -31,7 +31,7 @@ public class IDWPredictionRun {
         logger.info("Starting IDW Prediction");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
+        SparkConf conf = new SparkConf().setMaster("local").setAppName("IDW Prediction spark");
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.startTime();
 
@@ -63,24 +63,29 @@ public class IDWPredictionRun {
                 maxY = y;
         }
 
-        logger.info("MIN: ("+minX+","+minY+")");
-        logger.info("MAX: ("+maxX+","+maxY+")");
-
         //create RDD based on this grid point
         List<String> gridpoints = new ArrayList<String>();
-        int x,y;
         int minx = (int) Math.floor(minX);
         int miny = (int) Math.floor(minY);
+        int maxx = (int) Math.ceil(maxX);
+        int maxy = (int) Math.ceil(maxY);
+        logger.info("MIN: ("+minx+","+miny+")");
+        logger.info("MAX: ("+maxx+","+maxy+")");
         //Specify Grid Dimension
-        int x_length_grid = 1000; //in meters
-        int y_length_grid = 1000; //in meters
         final double grid_size = 1; //in meters
+        //TODO create gridding for =! 1
+        int x_length_grid = (int) ((maxx-minx)/grid_size); //in meters
+        int y_length_grid = (int) ((maxy-miny)/grid_size); //in meters
 
-        for(x=minx; x<x_length_grid+minx; x++){
-            for (y=miny; y<y_length_grid+miny; y++){
-                gridpoints.add(x+","+y);
+        int x,y;
+        int idxX = 0;
+        int idxY = 0;
+        for(x=0; x<x_length_grid; x++)
+            for (y = 0; y < y_length_grid; y++) {
+                idxX = (int) (minx + (x * grid_size));
+                idxY = (int) (miny + (y * grid_size));
+                gridpoints.add(idxX + "," + idxY);
             }
-        }
         //check size of gridsu
         logger.log(Level.INFO,"Number of GRID points : " + String.valueOf(gridpoints.size()));
         //create RDD for each grid points
@@ -176,7 +181,6 @@ public class IDWPredictionRun {
         gridWithPrediction.saveAsTextFile("gridWithPrediction");
 
         sc.stop();
-
         logger.info("FINISHED IDW PREDICTION");
     }
 }
