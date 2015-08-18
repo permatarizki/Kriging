@@ -36,18 +36,18 @@
       <file leaf-file-name="IDWPredictionRun.java" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/main/java/IDWPrediction/IDWPredictionRun.java">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="2.8696883">
-              <caret line="178" column="10" selection-start-line="178" selection-start-column="10" selection-end-line="178" selection-end-column="10" />
+            <state vertical-scroll-proportion="-1.7932011">
+              <caret line="111" column="39" selection-start-line="111" selection-start-column="39" selection-end-line="111" selection-end-column="39" />
               <folding>
                 <element signature="imports" expanded="true" />
                 <element signature="e#2378#2386#0" expanded="true" />
-                <element signature="e#3723#5886#0" expanded="true" />
-                <element signature="e#4329#4353#0" expanded="true" />
-                <element signature="e#5885#5886#0" expanded="true" />
-                <element signature="e#6034#6324#0" expanded="true" />
-                <element signature="e#6323#6324#0" expanded="true" />
-                <element signature="e#6452#8611#0" expanded="true" />
-                <element signature="e#8610#8611#0" expanded="true" />
+                <element signature="e#3683#5846#0" expanded="true" />
+                <element signature="e#4289#4313#0" expanded="true" />
+                <element signature="e#5845#5846#0" expanded="true" />
+                <element signature="e#5994#6284#0" expanded="true" />
+                <element signature="e#6283#6284#0" expanded="true" />
+                <element signature="e#6469#8848#0" expanded="true" />
+                <element signature="e#8847#8848#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -77,10 +77,11 @@
         <option value="$PROJECT_DIR$/src/main/java/sample/WordCount.java" />
         <option value="$PROJECT_DIR$/src/main/java/kriging/GeoNodes.java" />
         <option value="$PROJECT_DIR$/src/main/java/kriging/RunKriging.java" />
-        <option value="$PROJECT_DIR$/input/DataSample.txt" />
         <option value="$PROJECT_DIR$/src/main/java/sample/Exercise.java" />
         <option value="$PROJECT_DIR$/src/main/java/META-INF/MANIFEST.MF" />
         <option value="$PROJECT_DIR$/pom.xml" />
+        <option value="$PROJECT_DIR$/gridWithPoints/part-00000" />
+        <option value="$PROJECT_DIR$/input/DataSample.txt" />
         <option value="$PROJECT_DIR$/src/main/java/IDWPrediction/IDWPredictionRun.java" />
       </list>
     </option>
@@ -243,7 +244,7 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
-              <option name="myItemId" value="gridPoints" />
+              <option name="myItemId" value="input" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
@@ -679,7 +680,7 @@
       </extension>
       <option name="MAIN_CLASS_NAME" value="IDWPrediction.IDWPredictionRun" />
       <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="input/DataSample.txt 3" />
+      <option name="PROGRAM_PARAMETERS" value="input/DataSample.txt 20" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
       <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
       <option name="ALTERNATIVE_JRE_PATH" value="" />
@@ -730,12 +731,12 @@
       <workItem from="1439179629372" duration="34182000" />
       <workItem from="1439355926701" duration="8650000" />
       <workItem from="1439445207076" duration="7898000" />
-      <workItem from="1439722096757" duration="17755000" />
+      <workItem from="1439722096757" duration="19698000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="133880000" />
+    <option name="totallyTimeSpent" value="135823000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="0" y="23" width="1366" height="677" extended-state="6" />
@@ -809,13 +810,13 @@
           <folding>
             <element signature="imports" expanded="true" />
             <element signature="e#2378#2386#0" expanded="true" />
-            <element signature="e#3723#5886#0" expanded="true" />
-            <element signature="e#4329#4353#0" expanded="true" />
-            <element signature="e#5885#5886#0" expanded="true" />
-            <element signature="e#6034#6324#0" expanded="true" />
-            <element signature="e#6323#6324#0" expanded="true" />
-            <element signature="e#6452#8611#0" expanded="true" />
-            <element signature="e#8610#8611#0" expanded="true" />
+            <element signature="e#3683#5846#0" expanded="true" />
+            <element signature="e#4289#4313#0" expanded="true" />
+            <element signature="e#5845#5846#0" expanded="true" />
+            <element signature="e#5994#6284#0" expanded="true" />
+            <element signature="e#6283#6284#0" expanded="true" />
+            <element signature="e#6469#8848#0" expanded="true" />
+            <element signature="e#8847#8848#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -845,13 +846,13 @@
           <folding>
             <element signature="imports" expanded="true" />
             <element signature="e#2378#2386#0" expanded="true" />
-            <element signature="e#3723#5886#0" expanded="true" />
-            <element signature="e#4329#4353#0" expanded="true" />
-            <element signature="e#5885#5886#0" expanded="true" />
-            <element signature="e#6034#6324#0" expanded="true" />
-            <element signature="e#6323#6324#0" expanded="true" />
-            <element signature="e#6452#8611#0" expanded="true" />
-            <element signature="e#8610#8611#0" expanded="true" />
+            <element signature="e#3683#5846#0" expanded="true" />
+            <element signature="e#4289#4313#0" expanded="true" />
+            <element signature="e#5845#5846#0" expanded="true" />
+            <element signature="e#5994#6284#0" expanded="true" />
+            <element signature="e#6283#6284#0" expanded="true" />
+            <element signature="e#6469#8848#0" expanded="true" />
+            <element signature="e#8847#8848#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -892,13 +893,13 @@
           <folding>
             <element signature="imports" expanded="true" />
             <element signature="e#2378#2386#0" expanded="true" />
-            <element signature="e#3723#5886#0" expanded="true" />
-            <element signature="e#4329#4353#0" expanded="true" />
-            <element signature="e#5885#5886#0" expanded="true" />
-            <element signature="e#6034#6324#0" expanded="true" />
-            <element signature="e#6323#6324#0" expanded="true" />
-            <element signature="e#6452#8611#0" expanded="true" />
-            <element signature="e#8610#8611#0" expanded="true" />
+            <element signature="e#3683#5846#0" expanded="true" />
+            <element signature="e#4289#4313#0" expanded="true" />
+            <element signature="e#5845#5846#0" expanded="true" />
+            <element signature="e#5994#6284#0" expanded="true" />
+            <element signature="e#6283#6284#0" expanded="true" />
+            <element signature="e#6469#8848#0" expanded="true" />
+            <element signature="e#8847#8848#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -953,13 +954,13 @@
           <folding>
             <element signature="imports" expanded="true" />
             <element signature="e#2378#2386#0" expanded="true" />
-            <element signature="e#3723#5886#0" expanded="true" />
-            <element signature="e#4329#4353#0" expanded="true" />
-            <element signature="e#5885#5886#0" expanded="true" />
-            <element signature="e#6034#6324#0" expanded="true" />
-            <element signature="e#6323#6324#0" expanded="true" />
-            <element signature="e#6452#8611#0" expanded="true" />
-            <element signature="e#8610#8611#0" expanded="true" />
+            <element signature="e#3683#5846#0" expanded="true" />
+            <element signature="e#4289#4313#0" expanded="true" />
+            <element signature="e#5845#5846#0" expanded="true" />
+            <element signature="e#5994#6284#0" expanded="true" />
+            <element signature="e#6283#6284#0" expanded="true" />
+            <element signature="e#6469#8848#0" expanded="true" />
+            <element signature="e#8847#8848#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -1130,13 +1131,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/input/DataSample.txt">
-      <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.0">
-          <caret line="3" column="10" selection-start-line="3" selection-start-column="10" selection-end-line="3" selection-end-column="10" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/input/Data2_XYZ.txt">
       <provider selected="true" editor-type-id="LargeFileEditor">
         <state />
@@ -1174,31 +1168,28 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/gridPoints/part-00000">
-      <provider editor-type-id="com.intellij.database.editor.CsvTableFileEditorProvider">
-        <state />
-      </provider>
+    <entry file="file://$PROJECT_DIR$/input/DataSample.txt">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.74358976">
-          <caret line="182" column="0" selection-start-line="182" selection-start-column="0" selection-end-line="182" selection-end-column="0" />
+        <state vertical-scroll-proportion="0.12747875">
+          <caret line="3" column="0" selection-start-line="3" selection-start-column="0" selection-end-line="3" selection-end-column="6" />
           <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/main/java/IDWPrediction/IDWPredictionRun.java">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="2.8696883">
-          <caret line="178" column="10" selection-start-line="178" selection-start-column="10" selection-end-line="178" selection-end-column="10" />
+        <state vertical-scroll-proportion="-1.7932011">
+          <caret line="111" column="39" selection-start-line="111" selection-start-column="39" selection-end-line="111" selection-end-column="39" />
           <folding>
             <element signature="imports" expanded="true" />
             <element signature="e#2378#2386#0" expanded="true" />
-            <element signature="e#3723#5886#0" expanded="true" />
-            <element signature="e#4329#4353#0" expanded="true" />
-            <element signature="e#5885#5886#0" expanded="true" />
-            <element signature="e#6034#6324#0" expanded="true" />
-            <element signature="e#6323#6324#0" expanded="true" />
-            <element signature="e#6452#8611#0" expanded="true" />
-            <element signature="e#8610#8611#0" expanded="true" />
+            <element signature="e#3683#5846#0" expanded="true" />
+            <element signature="e#4289#4313#0" expanded="true" />
+            <element signature="e#5845#5846#0" expanded="true" />
+            <element signature="e#5994#6284#0" expanded="true" />
+            <element signature="e#6283#6284#0" expanded="true" />
+            <element signature="e#6469#8848#0" expanded="true" />
+            <element signature="e#8847#8848#0" expanded="true" />
           </folding>
         </state>
       </provider>

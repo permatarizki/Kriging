@@ -73,7 +73,6 @@ public class IDWPredictionRun {
         logger.info("MAX: ("+maxx+","+maxy+")");
         //Specify Grid Dimension
         final double grid_size = 1; //in meters
-        //TODO create gridding for =! 1
         int x_length_grid = (int) ((maxx-minx)/grid_size); //in meters
         int y_length_grid = (int) ((maxy-miny)/grid_size); //in meters
 
@@ -139,6 +138,7 @@ public class IDWPredictionRun {
                 }
         );
         gridWithPoints.collect();
+        gridWithPoints.saveAsTextFile("gridWithPoints");
 
         JavaRDD<String> gridWithPrediction = gridWithPoints.map(
                 new Function<Tuple2<String, String>, String>() {
@@ -163,13 +163,16 @@ public class IDWPredictionRun {
                                 double deltaX = x_grid - x_point;
                                 double deltaY = y_grid - y_point;
                                 double distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-                                numerator = numerator + z_point / distance;
-                                denominator = denominator + 1 / distance;
+                                if(distance==0) {
+                                    //nothing to do here
+                                }else{
+                                    numerator = numerator + (double) (z_point / distance);
+                                    denominator = denominator + (double) (1 / distance);
+                                }
 
                             }
 
-                            double weight = numerator / denominator;
+                            double weight = (double) (numerator / denominator);
                             DecimalFormat df = new DecimalFormat("#.##");
                             String dx = df.format(weight);
                             return gridwithpointsTuple._1() + "," + dx;
