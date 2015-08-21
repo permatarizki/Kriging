@@ -31,7 +31,7 @@ public class IDWPredictionRun {
         logger.info("Starting IDW Prediction");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setMaster("local").setAppName("IDW Prediction spark");
+        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.startTime();
 
@@ -41,10 +41,9 @@ public class IDWPredictionRun {
         final double radiusrange = Double.parseDouble(args[1]); //in meters
         //Now we load LiDAR data input from a file and create RDD for it
         final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0]);
-        final int length_inputLIDAR = (int) rdd_inputLIDAR.count();
-        logger.info("Number of LiDAR input points : " + String.valueOf(length_inputLIDAR));
         //Finding minimum & maximum values
         final List<String> inputLIDAR = rdd_inputLIDAR.collect();
+        final int length_inputLIDAR = inputLIDAR.size();
         double minX = 9999999;
         double maxX = 0;
         double minY = 9999999;
@@ -67,15 +66,20 @@ public class IDWPredictionRun {
         final int miny = (int) Math.floor(minY);
         final int maxx = (int) Math.ceil(maxX);
         final int maxy = (int) Math.ceil(maxY);
-        logger.info("MIN: ("+minx+","+miny+")");
-        logger.info("MAX: ("+maxx+","+maxy+")");
-
+        logger.info("+------------------------------------------------+");
+        logger.info("| Number of LiDAR input points : " + String.valueOf(length_inputLIDAR));
+        logger.info("| MIN: ("+minx+","+miny+")");
+        logger.info("| MAX: ("+maxx+","+maxy+")");
+        logger.info("| Length X: "+(int)(maxx-minx));
+        logger.info("| Length Y: "+(int)(maxy-miny));
+        logger.info("+------------------------------------------------+");
         //TODO create grid points, and merge it with data input
 
         /**
          * The ourput of this RDD will be
          * <key,value> = <gridpoint(x,y) numerator denumerator>
          * </>*/
+        final int[] gridcounter = {0};
         JavaPairRDD<String,String> gridWithDeNumerators = rdd_inputLIDAR.flatMapToPair(
                 new PairFlatMapFunction<String, String, String>() {
                     public Iterable<Tuple2<String, String>> call(String s) throws Exception {
@@ -116,6 +120,7 @@ public class IDWPredictionRun {
                                     }
                                 }
                                 start_y = start_y + grid_size;
+                                gridcounter[0]++;
                             }
                             start_y = anchory;
                             start_x = start_x + grid_size;
@@ -126,6 +131,8 @@ public class IDWPredictionRun {
         );
         gridWithDeNumerators.collect();
         gridWithDeNumerators.saveAsTextFile("gridWithDeNumerators");
+        rdd_inputLIDAR.unpersist();
+
 
         JavaPairRDD<String, String> gridWithOneDeNumerator = gridWithDeNumerators.reduceByKey(
                 new Function2<String, String, String>() {
@@ -145,18 +152,19 @@ public class IDWPredictionRun {
         );
         gridWithOneDeNumerator.collect();
         gridWithOneDeNumerator.saveAsTextFile("gridWithOneDeNumerator");
+        gridWithDeNumerators.unpersist();
 
-        JavaPairRDD<String,String> gridWithPrediction = gridWithOneDeNumerator.mapValues(
+        JavaPairRDD<String, String> gridWithPrediction = gridWithOneDeNumerator.mapValues(
                 new Function<String, String>() {
                     public String call(String s) throws Exception {
                         double weight;
                         String[] elements = s.split(" ");
                         double numerator = Double.parseDouble(elements[0]);
                         double denumerator = Double.parseDouble(elements[1]);
-                        if(denumerator == 0){
+                        if (denumerator == 0) {
                             weight = 0;
-                        }else {
-                             weight = (double) (numerator / denumerator);
+                        } else {
+                            weight = (double) (numerator / denumerator);
                         }
                         DecimalFormat df = new DecimalFormat("#.##");
                         String dx = df.format(weight);
@@ -164,12 +172,12 @@ public class IDWPredictionRun {
                     }
                 }
         );
-        gridWithPrediction.collect();
         gridWithPrediction.map(
                 new Function<Tuple2<String,String>, Object>() {
                     @Override
                     public Object call(Tuple2<String, String> v1) throws Exception {
-                        return v1._1()+","+v1._2();
+                        String[] elements = v1._1().split(",");
+                        return elements[0]+" "+elements[1]+" "+v1._2();
                     }
                 }
         ).saveAsTextFile("gridWithPrediction");

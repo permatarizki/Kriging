@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>kr.ac.ajou.wise</groupId>
-    <artifactId>spark-example_0.1</artifactId>
+    <artifactId>Interpolation.spark</artifactId>
     <version>0.0.1</version>
 
     <properties>
