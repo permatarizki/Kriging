@@ -7,6 +7,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
+import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
 
 import java.text.DecimalFormat;
@@ -40,7 +41,7 @@ public class IDWPredictionRun {
         //specify radius range to search nearest points
         final double radiusrange = Double.parseDouble(args[1]); //in meters
         //Now we load LiDAR data input from a file and create RDD for it
-        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0]);
+        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0],100).persist(StorageLevel.MEMORY_AND_DISK_SER());
         //Finding minimum & maximum values
         final List<String> inputLIDAR = rdd_inputLIDAR.collect();
         final int length_inputLIDAR = inputLIDAR.size();
@@ -79,7 +80,6 @@ public class IDWPredictionRun {
          * The ourput of this RDD will be
          * <key,value> = <gridpoint(x,y) numerator denumerator>
          * </>*/
-        final int[] gridcounter = {0};
         JavaPairRDD<String,String> gridWithDeNumerators = rdd_inputLIDAR.flatMapToPair(
                 new PairFlatMapFunction<String, String, String>() {
                     public Iterable<Tuple2<String, String>> call(String s) throws Exception {
@@ -120,7 +120,6 @@ public class IDWPredictionRun {
                                     }
                                 }
                                 start_y = start_y + grid_size;
-                                gridcounter[0]++;
                             }
                             start_y = anchory;
                             start_x = start_x + grid_size;
@@ -128,7 +127,7 @@ public class IDWPredictionRun {
                         return grid_with_closestPoints;
                     }
                 }
-        );
+        ).persist(StorageLevel.MEMORY_AND_DISK_SER());
         gridWithDeNumerators.collect();
         gridWithDeNumerators.saveAsTextFile("gridWithDeNumerators");
         rdd_inputLIDAR.unpersist();
