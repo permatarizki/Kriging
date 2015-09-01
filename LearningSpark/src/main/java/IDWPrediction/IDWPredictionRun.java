@@ -24,8 +24,8 @@ public class IDWPredictionRun {
     private static Logger logger = Logger.getLogger(IDWPredictionRun.class.getName());
 
     public static void main(String args[]){
-        if(args.length != 2){
-            System.err.println("Usage: IDWPrediction <pathtoLidarData> <radiusrange>");
+        if(args.length != 3){
+            System.err.println("Usage: IDWPrediction <pathtoLidarData> <radiusrange> <inputPartitions>");
             System.exit(1);
         }
 
@@ -41,17 +41,18 @@ public class IDWPredictionRun {
         //specify radius range to search nearest points
         final double radiusrange = Double.parseDouble(args[1]); //in meters
         //Now we load LiDAR data input from a file and create RDD for it
-        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0],100).persist(StorageLevel.MEMORY_AND_DISK_SER());
+        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0],Integer.parseInt(args[2])).persist(StorageLevel.MEMORY_ONLY_2());
         //Finding minimum & maximum values
-        final List<String> inputLIDAR = rdd_inputLIDAR.collect();
-        final int length_inputLIDAR = inputLIDAR.size();
+//        rdd_inputLIDAR.collect();
+        int length_inputLIDAR = (int) rdd_inputLIDAR.count();
         double minX = 9999999;
         double maxX = 0;
         double minY = 9999999;
         double maxY = 0;
-        for(int i=0; i<inputLIDAR.size(); i++){
+
+        for(String line: rdd_inputLIDAR.take(length_inputLIDAR)){
             String delims = " ";
-            String[] elements= inputLIDAR.get(i).split(delims);
+            String[] elements= line.toString().split(delims);
             double x = Double.parseDouble(elements[0]);
             double y = Double.parseDouble(elements[1]);
             if(x < minX)
@@ -127,9 +128,9 @@ public class IDWPredictionRun {
                         return grid_with_closestPoints;
                     }
                 }
-        ).persist(StorageLevel.MEMORY_AND_DISK_SER());
-        gridWithDeNumerators.collect();
-        gridWithDeNumerators.saveAsTextFile("gridWithDeNumerators");
+        ).persist(StorageLevel.MEMORY_ONLY_2());
+//        gridWithDeNumerators.collect();
+//        gridWithDeNumerators.saveAsTextFile("gridWithDeNumerators");
         rdd_inputLIDAR.unpersist();
 
 
@@ -149,8 +150,8 @@ public class IDWPredictionRun {
                     }
                 }
         );
-        gridWithOneDeNumerator.collect();
-        gridWithOneDeNumerator.saveAsTextFile("gridWithOneDeNumerator");
+//        gridWithOneDeNumerator.collect();
+//        gridWithOneDeNumerator.saveAsTextFile("gridWithOneDeNumerator");
         gridWithDeNumerators.unpersist();
 
         JavaPairRDD<String, String> gridWithPrediction = gridWithOneDeNumerator.mapValues(
