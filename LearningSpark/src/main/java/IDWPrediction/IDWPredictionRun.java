@@ -24,8 +24,8 @@ public class IDWPredictionRun {
     private static Logger logger = Logger.getLogger(IDWPredictionRun.class.getName());
 
     public static void main(String args[]){
-        if(args.length != 3){
-            System.err.println("Usage: IDWPrediction <pathtoLidarData> <radiusrange> <inputPartitions>");
+        if(args.length != 4){
+            System.err.println("Usage: IDWPrediction <pathtoLidarData> <radiusrange> <inputPartitions> <gridsize>");
             System.exit(1);
         }
 
@@ -33,43 +33,86 @@ public class IDWPredictionRun {
 
         //Create a Java Spark Context
         SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
+        conf.registerKryoClasses(IDWPredictionRun.class.getClasses());
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.startTime();
 
         //specofy gridsize
-        final double grid_size = 1; //in meter
+        final double grid_size = Double.parseDouble(args[3]); //in meter
         //specify radius range to search nearest points
         final double radiusrange = Double.parseDouble(args[1]); //in meters
         //Now we load LiDAR data input from a file and create RDD for it
-        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0],Integer.parseInt(args[2])).persist(StorageLevel.MEMORY_ONLY_2());
+        final JavaRDD<String> rdd_inputLIDAR = sc.textFile(args[0],Integer.parseInt(args[2])).persist(StorageLevel.MEMORY_ONLY_SER_2());
         //Finding minimum & maximum values
-//        rdd_inputLIDAR.collect();
-        int length_inputLIDAR = (int) rdd_inputLIDAR.count();
-        double minX = 9999999;
-        double maxX = 0;
-        double minY = 9999999;
-        double maxY = 0;
 
-        for(String line: rdd_inputLIDAR.take(length_inputLIDAR)){
-            String delims = " ";
-            String[] elements= line.toString().split(delims);
-            double x = Double.parseDouble(elements[0]);
-            double y = Double.parseDouble(elements[1]);
-            if(x < minX)
-                minX = x;
-            if(x > maxX)
-                maxX = x;
-            if(y < minY)
-                minY = y;
-            if(y > maxY)
-                maxY = y;
+        JavaPairRDD<String, Double> ones = rdd_inputLIDAR.flatMapToPair(new PairFlatMapFunction<String, String, Double>() {
+            @Override
+            public Iterable<Tuple2<String, Double>> call(String s) {
+                String delims = " ";
+                String[] elements = s.toString().split(delims);
+                List<Tuple2<String,Double>> mapoutputs = new ArrayList<Tuple2<String, Double>>();
+                double x = Double.parseDouble(elements[0]);
+                double y = Double.parseDouble(elements[1]);
+                mapoutputs.add(new Tuple2<String, Double>("x", x));
+                mapoutputs.add(new Tuple2<String, Double>("y", y));
+                return mapoutputs;
+            }
+        });
+
+        //Finding max values
+        JavaPairRDD<String, Double> maxvals = ones.reduceByKey(new Function2<Double, Double, Double>() {
+            @Override public Double call(Double i1, Double i2) {
+                if (i1 > i2)
+                    return i1;
+                else
+                    return i2;
+            }
+        });
+
+
+
+        //Finding min values
+        JavaPairRDD<String, Double> minvals = ones.reduceByKey(new Function2<Double, Double, Double>() {
+            @Override public Double call(Double i1, Double i2) {
+                if (i1 < i2)
+                    return i1;
+                else
+                    return i2;
+            }
+        });
+        int tempt_minx = 0;
+        int tempt_miny = 0;
+        int tempt_maxx = 0;
+        int tempt_maxy = 0;
+
+        List<Tuple2<String, Double>> output1 = maxvals.collect();
+        for (Tuple2<?,?> tuple : output1) {
+            if(tuple._1().equals("x")) {
+                tempt_maxx = (int) Math.ceil((Double) tuple._2());
+            }else{
+                tempt_maxy = (int) Math.ceil((Double) tuple._2());
+            }
+
         }
-        final int minx = (int) Math.floor(minX);
-        final int miny = (int) Math.floor(minY);
-        final int maxx = (int) Math.ceil(maxX);
-        final int maxy = (int) Math.ceil(maxY);
+        List<Tuple2<String, Double>> output2 = minvals.collect();
+        for (Tuple2<?,?> tuple : output2) {
+            if(tuple._1().equals("x")) {
+                tempt_minx = (int) Math.floor((Double) tuple._2());
+            }else{
+                tempt_miny = (int) Math.floor((Double) tuple._2());
+            }
+        }
+
+        final int minx = tempt_minx;
+        final int miny = tempt_miny;
+        final int maxx = tempt_maxx;
+        final int maxy = tempt_maxy;
+        ones.unpersist();
+        maxvals.unpersist();
+        minvals.unpersist();
+
         logger.info("+------------------------------------------------+");
-        logger.info("| Number of LiDAR input points : " + String.valueOf(length_inputLIDAR));
+        logger.info("| Number of LiDAR input points : " + String.valueOf(rdd_inputLIDAR.count()));
         logger.info("| MIN: ("+minx+","+miny+")");
         logger.info("| MAX: ("+maxx+","+maxy+")");
         logger.info("| Length X: "+(int)(maxx-minx));
@@ -128,7 +171,7 @@ public class IDWPredictionRun {
                         return grid_with_closestPoints;
                     }
                 }
-        ).persist(StorageLevel.MEMORY_ONLY_2());
+        ).persist(StorageLevel.MEMORY_ONLY_SER_2());
 //        gridWithDeNumerators.collect();
 //        gridWithDeNumerators.saveAsTextFile("gridWithDeNumerators");
         rdd_inputLIDAR.unpersist();

@@ -6,7 +6,7 @@
 
     <groupId>kr.ac.ajou.wise</groupId>
     <artifactId>Interpolation.spark</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.0</version>
 
     <properties>
         <java.version>1.7</java.version>
