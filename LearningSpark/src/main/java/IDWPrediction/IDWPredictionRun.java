@@ -32,7 +32,7 @@ public class IDWPredictionRun {
         logger.info("Starting IDW Prediction");
 
         //Create a Java Spark Context
-        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark");
+        SparkConf conf = new SparkConf().setAppName("IDW Prediction spark ["+args[0]+";"+args[1]+";"+args[2]+";"+args[3]);
         conf.registerKryoClasses(IDWPredictionRun.class.getClasses());
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.startTime();
